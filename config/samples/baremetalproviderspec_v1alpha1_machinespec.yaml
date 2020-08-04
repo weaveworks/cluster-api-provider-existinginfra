@@ -1,0 +1,7 @@
+apiVersion: baremetalproviderspec/v1alpha1
+kind: MachineSpec
+metadata:
+  name: machinespec-sample
+spec:
+  # Add fields here
+  foo: bar

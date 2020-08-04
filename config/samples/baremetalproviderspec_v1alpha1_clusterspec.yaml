@@ -1,0 +1,7 @@
+apiVersion: baremetalproviderspec/v1alpha1
+kind: ClusterSpec
+metadata:
+  name: clusterspec-sample
+spec:
+  # Add fields here
+  foo: bar

@@ -1,0 +1,68 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginfrabootstraps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginfrabootstraps/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginfraclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginfraclusters/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginframachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginframachines/status
+  verbs:
+  - get
+  - patch
+  - update

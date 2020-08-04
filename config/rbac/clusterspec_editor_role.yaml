@@ -1,0 +1,24 @@
+# permissions for end users to edit clusterspecs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clusterspec-editor-role
+rules:
+- apiGroups:
+  - baremetalproviderspec
+  resources:
+  - clusterspecs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - baremetalproviderspec
+  resources:
+  - clusterspecs/status
+  verbs:
+  - get

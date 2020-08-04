@@ -1,0 +1,7 @@
+apiVersion: cluster.weave.works/v1alpha3
+kind: ExistingInfraMachine
+metadata:
+  name: existinginframachine-sample
+spec:
+  # Add fields here
+  foo: bar

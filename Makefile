@@ -2,7 +2,10 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+CRD_OPTIONS ?= "crd"
+
+API_ROOT := ./apis
+API_DIRS := ${API_ROOT}/baremetalproviderspec/v1alpha1,${API_ROOT}/cluster.weave.works/v1alpha3
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -51,8 +54,13 @@ vet:
 	go vet ./...
 
 # Generate code
-generate: controller-gen
+generate: controller-gen conversion-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONVERSION_GEN) \
+		--output-base . \
+		--input-dirs ${API_DIRS} \
+		-O zz_generated.conversion \
+		-h hack/boilerplate.go.txt
 
 # Build the docker image
 docker-build: test
@@ -77,4 +85,19 @@ ifeq (, $(shell which controller-gen))
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+conversion-gen:
+ifeq (, $(shell which conversion-gen))
+	@{ \
+	set -e ;\
+	CONVERSION_GEN_TMP_DIR=$$(mktemp -d) ;\
+	cd $$CONVERSION_GEN_TMP_DIR ;\
+	go mod init tmp ;\
+	go get k8s.io/code-generator/cmd/conversion-gen ;\
+	rm -rf $$CONVERSION_GEN_TMP_DIR ;\
+	}
+CONVERSION_GEN=$(GOBIN)/conversion-gen
+else
+CONVERSION_GEN=$(shell which conversion-gen)
 endif

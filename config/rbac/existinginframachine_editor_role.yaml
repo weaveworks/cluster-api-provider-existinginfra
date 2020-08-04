@@ -1,0 +1,24 @@
+# permissions for end users to edit existinginframachines.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: existinginframachine-editor-role
+rules:
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginframachines
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginframachines/status
+  verbs:
+  - get

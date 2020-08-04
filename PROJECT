@@ -1,3 +1,16 @@
 multigroup: true
 repo: github.com/twelho/capi-existinginfra
+resources:
+- group: cluster.weave.works
+  kind: ExistingInfraCluster
+  version: v1alpha3
+- group: cluster.weave.works
+  kind: ExistingInfraMachine
+  version: v1alpha3
+- group: baremetalproviderspec
+  kind: ClusterSpec
+  version: v1alpha1
+- group: baremetalproviderspec
+  kind: MachineSpec
+  version: v1alpha1
 version: "2"
