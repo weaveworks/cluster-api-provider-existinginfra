@@ -1,5 +1,5 @@
 /*
-Copyright 2020 Dennis Marttinen.
+Copyright 2020 Weaveworks.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,11 +39,15 @@ var (
 	localSchemeBuilder = &SchemeBuilder.SchemeBuilder
 )
 
-func addKnownTypes(scheme *runtime.Scheme) error {
+func addKnownClusterTypes(scheme *runtime.Scheme) error {
 	// BareMetalClusterProviderSpec is internally called
 	// ClusterSpec to enable automatic conversions to v1alpha3.
 	scheme.AddKnownTypeWithName(GroupVersion.WithKind("BareMetalClusterProviderSpec"), &ClusterSpec{})
 
+	return nil
+}
+
+func addKnownMachineTypes(scheme *runtime.Scheme) error {
 	// BareMetalMachineProviderSpec is internally called
 	// MachineSpec to enable automatic conversions to v1alpha3.
 	scheme.AddKnownTypeWithName(GroupVersion.WithKind("BareMetalMachineProviderSpec"), &MachineSpec{})

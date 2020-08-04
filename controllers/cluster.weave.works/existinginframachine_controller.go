@@ -1,5 +1,5 @@
 /*
-Copyright 2020 Dennis Marttinen.
+Copyright 2020 Weaveworks.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	clusterweaveworksv1alpha3 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
+	_ "github.com/twelho/capi-existinginfra/pkg/apis/wksprovider/controller/wksctl"
 )
 
 // ExistingInfraMachineReconciler reconciles a ExistingInfraMachine object

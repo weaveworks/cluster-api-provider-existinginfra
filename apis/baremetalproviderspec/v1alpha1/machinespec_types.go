@@ -1,5 +1,5 @@
 /*
-Copyright 2020 Dennis Marttinen.
+Copyright 2020 Weaveworks.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,15 +37,6 @@ type MachineSpec struct {
 	Public           EndPoint `json:"public,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-
-// MachineSpecList contains a list of MachineSpec
-type MachineSpecList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MachineSpec `json:"items"`
-}
-
 // EndPoint groups the details required to establish a connection.
 type EndPoint struct {
 	Address string `json:"address"`
@@ -53,5 +44,5 @@ type EndPoint struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&MachineSpec{}, &MachineSpecList{})
+	localSchemeBuilder.Register(addKnownMachineTypes)
 }
