@@ -1,0 +1,3 @@
+multigroup: true
+repo: github.com/twelho/capi-existinginfra
+version: "2"
