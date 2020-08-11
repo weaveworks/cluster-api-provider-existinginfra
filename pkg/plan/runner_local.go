@@ -7,8 +7,7 @@ import (
 )
 
 // LocalRunner is a runner executing commands on the same host it's running on.
-type LocalRunner struct {
-}
+type LocalRunner struct{}
 
 var _ Runner = &LocalRunner{}
 

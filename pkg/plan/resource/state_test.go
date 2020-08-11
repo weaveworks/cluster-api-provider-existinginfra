@@ -16,6 +16,6 @@ func TestToState(t *testing.T) {
 		"name":    "make",
 		"version": "3.83",
 	})
-	assert.Equal(t, expected, toState(rpm))
+	assert.Equal(t, expected, ToState(rpm))
 	assert.Equal(t, expected, rpm.State())
 }

@@ -34,7 +34,7 @@ var _ plan.Resource = plan.RegisterResource(&Service{})
 
 // State implements plan.Resource.
 func (p *Service) State() plan.State {
-	return toState(p)
+	return ToState(p)
 }
 
 func systemd(r plan.Runner, format string, args ...interface{}) (string, error) {

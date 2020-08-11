@@ -12,7 +12,7 @@ import (
 
 // KubeadmJoin represents an attempt to join a Kubernetes node via kubeadm.
 type KubeadmJoin struct {
-	base
+	Base
 
 	// IsMaster should be true if this node should join as a master, or false otherwise.
 	IsMaster bool `structs:"isMaster"`
@@ -44,7 +44,7 @@ var _ plan.Resource = plan.RegisterResource(&KubeadmJoin{})
 
 // State implements plan.Resource.
 func (kj *KubeadmJoin) State() plan.State {
-	return toState(kj)
+	return ToState(kj)
 }
 
 // Apply implements plan.Resource.
@@ -57,7 +57,7 @@ func (kj *KubeadmJoin) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
 		apiServerEndpoint = fmt.Sprintf("%s:%d", kj.ControlPlaneEndpoint, kj.MasterPort)
 	}
 	kubeadmJoinCmd := kj.kubeadmJoinCmd(apiServerEndpoint)
-	if stdouterr, err := runner.RunCommand(withoutProxy(kubeadmJoinCmd), nil); err != nil {
+	if stdouterr, err := runner.RunCommand(WithoutProxy(kubeadmJoinCmd), nil); err != nil {
 		log.WithField("stdouterr", stdouterr).Error("failed to join cluster")
 		return false, errors.Wrap(err, "failed to join cluster")
 	}

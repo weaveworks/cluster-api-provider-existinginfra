@@ -85,17 +85,6 @@ func (g *graph) Invert() *graph {
 	return newg
 }
 
-func (g *graph) Targets(source string) []string {
-	m := g.outputs[source]
-	keys := make([]string, len(m))
-	i := 0
-	for k := range m {
-		keys[i] = k
-		i++
-	}
-	return keys
-}
-
 func (g *graph) unsafeRemoveEdge(from, to string) {
 	edgesFrom := g.edges[from]
 	if edgesFrom == nil {

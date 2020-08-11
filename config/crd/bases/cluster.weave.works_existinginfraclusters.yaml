@@ -15,327 +15,169 @@ spec:
     plural: existinginfraclusters
     singular: existinginfracluster
   scope: Namespaced
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      description: ExistingInfraCluster is the Schema for the existinginfraclusters
+        API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: ClusterSpec defines the desired state of ExistingInfraCluster
+          properties:
+            addons:
+              items:
+                description: Addon describes an addon to install on the cluster.
+                properties:
+                  deps:
+                    items:
+                      type: string
+                    type: array
+                  name:
+                    type: string
+                  params:
+                    additionalProperties:
+                      type: string
+                    type: object
+                required:
+                - name
+                type: object
+              type: array
+            apiServer:
+              properties:
+                additionalSANs:
+                  items:
+                    type: string
+                  type: array
+                extraArguments:
+                  items:
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                    required:
+                    - name
+                    - value
+                    type: object
+                  type: array
+              type: object
+            authenticationWebhook:
+              properties:
+                cacheTTL:
+                  type: string
+                secretFile:
+                  type: string
+                url:
+                  type: string
+              required:
+              - secretFile
+              - url
+              type: object
+            authorizationWebhook:
+              properties:
+                cacheAuthorizedTTL:
+                  type: string
+                cacheUnauthorizedTTL:
+                  type: string
+                secretFile:
+                  type: string
+                url:
+                  type: string
+              required:
+              - secretFile
+              - url
+              type: object
+            cloudProvider:
+              type: string
+            controlPlaneEndpoint:
+              type: string
+            cri:
+              properties:
+                kind:
+                  type: string
+                package:
+                  type: string
+                version:
+                  type: string
+              required:
+              - kind
+              - package
+              - version
+              type: object
+            httpProxy:
+              type: string
+            imageRepository:
+              type: string
+            kubeletArguments:
+              items:
+                properties:
+                  name:
+                    type: string
+                  value:
+                    type: string
+                required:
+                - name
+                - value
+                type: object
+              type: array
+            os:
+              properties:
+                files:
+                  items:
+                    properties:
+                      destination:
+                        type: string
+                      source:
+                        properties:
+                          configmap:
+                            type: string
+                          key:
+                            type: string
+                        required:
+                        - configmap
+                        - key
+                        type: object
+                    required:
+                    - destination
+                    - source
+                    type: object
+                  type: array
+              type: object
+            sshKeyPath:
+              type: string
+            user:
+              type: string
+          required:
+          - cri
+          - user
+          type: object
+        status:
+          description: ClusterStatus defines the observed state of ExistingInfraCluster
+          properties:
+            ready:
+              type: boolean
+          required:
+          - ready
+          type: object
+      type: object
   version: v1alpha3
   versions:
   - name: v1alpha3
-    schema:
-      openAPIV3Schema:
-        description: ExistingInfraCluster is the Schema for the existinginfraclusters
-          API
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: ClusterSpec defines the desired state of ExistingInfraCluster
-            properties:
-              addons:
-                items:
-                  description: Addon describes an addon to install on the cluster.
-                  properties:
-                    deps:
-                      items:
-                        type: string
-                      type: array
-                    name:
-                      type: string
-                    params:
-                      additionalProperties:
-                        type: string
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
-              apiServer:
-                properties:
-                  additionalSANs:
-                    items:
-                      type: string
-                    type: array
-                  extraArguments:
-                    items:
-                      properties:
-                        name:
-                          type: string
-                        value:
-                          type: string
-                      required:
-                      - name
-                      - value
-                      type: object
-                    type: array
-                type: object
-              authenticationWebhook:
-                properties:
-                  cacheTTL:
-                    type: string
-                  secretFile:
-                    type: string
-                  url:
-                    type: string
-                required:
-                - secretFile
-                - url
-                type: object
-              authorizationWebhook:
-                properties:
-                  cacheAuthorizedTTL:
-                    type: string
-                  cacheUnauthorizedTTL:
-                    type: string
-                  secretFile:
-                    type: string
-                  url:
-                    type: string
-                required:
-                - secretFile
-                - url
-                type: object
-              cloudProvider:
-                type: string
-              controlPlaneEndpoint:
-                type: string
-              cri:
-                properties:
-                  kind:
-                    type: string
-                  package:
-                    type: string
-                  version:
-                    type: string
-                required:
-                - kind
-                - package
-                - version
-                type: object
-              httpProxy:
-                type: string
-              imageRepository:
-                type: string
-              kubeletArguments:
-                items:
-                  properties:
-                    name:
-                      type: string
-                    value:
-                      type: string
-                  required:
-                  - name
-                  - value
-                  type: object
-                type: array
-              os:
-                properties:
-                  files:
-                    items:
-                      properties:
-                        destination:
-                          type: string
-                        source:
-                          properties:
-                            configmap:
-                              type: string
-                            key:
-                              type: string
-                          required:
-                          - configmap
-                          - key
-                          type: object
-                      required:
-                      - destination
-                      - source
-                      type: object
-                    type: array
-                type: object
-              sshKeyPath:
-                type: string
-              user:
-                type: string
-            required:
-            - cri
-            - user
-            type: object
-          status:
-            description: ClusterStatus defines the observed state of ExistingInfraCluster
-            properties:
-              ready:
-                type: boolean
-            required:
-            - ready
-            type: object
-        type: object
     served: true
     storage: true
-    subresources:
-      status: {}
-  - name: v1alpha3
-    schema:
-      openAPIV3Schema:
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            properties:
-              addons:
-                items:
-                  description: Addon describes an addon to install on the cluster.
-                  properties:
-                    deps:
-                      items:
-                        type: string
-                      type: array
-                    name:
-                      type: string
-                    params:
-                      additionalProperties:
-                        type: string
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
-              apiServer:
-                properties:
-                  additionalSANs:
-                    items:
-                      type: string
-                    type: array
-                  extraArguments:
-                    items:
-                      properties:
-                        name:
-                          type: string
-                        value:
-                          type: string
-                      required:
-                      - name
-                      - value
-                      type: object
-                    type: array
-                type: object
-              authenticationWebhook:
-                properties:
-                  cacheTTL:
-                    type: string
-                  secretFile:
-                    type: string
-                  url:
-                    type: string
-                required:
-                - secretFile
-                - url
-                type: object
-              authorizationWebhook:
-                properties:
-                  cacheAuthorizedTTL:
-                    type: string
-                  cacheUnauthorizedTTL:
-                    type: string
-                  secretFile:
-                    type: string
-                  url:
-                    type: string
-                required:
-                - secretFile
-                - url
-                type: object
-              cloudProvider:
-                type: string
-              controlPlaneEndpoint:
-                type: string
-              cri:
-                properties:
-                  kind:
-                    type: string
-                  package:
-                    type: string
-                  version:
-                    type: string
-                required:
-                - kind
-                - package
-                - version
-                type: object
-              httpProxy:
-                type: string
-              imageRepository:
-                type: string
-              kubeletArguments:
-                items:
-                  properties:
-                    name:
-                      type: string
-                    value:
-                      type: string
-                  required:
-                  - name
-                  - value
-                  type: object
-                type: array
-              os:
-                properties:
-                  files:
-                    items:
-                      properties:
-                        destination:
-                          type: string
-                        source:
-                          properties:
-                            configmap:
-                              type: string
-                            key:
-                              type: string
-                          required:
-                          - configmap
-                          - key
-                          type: object
-                      required:
-                      - destination
-                      - source
-                      type: object
-                    type: array
-                type: object
-              sshKeyPath:
-                description: 'TODO: Figure out a way to re-generate the CRDs. Also,
-                  this field should be removed in v1alpha3 once we have the conversions
-                  in place'
-                type: string
-              user:
-                type: string
-            required:
-            - cri
-            - user
-            type: object
-          status:
-            properties:
-              ready:
-                type: boolean
-            required:
-            - ready
-            type: object
-        type: object
-    served: true
-    storage: false
 status:
   acceptedNames:
     kind: ""

@@ -6,7 +6,7 @@ import (
 	"github.com/fatih/structs"
 )
 
-// toState creates a new State using reflection on v.
-func toState(v interface{}) plan.State {
+// ToState creates a new State using reflection on v.
+func ToState(v interface{}) plan.State {
 	return structs.Map(v)
 }

@@ -29,7 +29,7 @@ func init() {
 
 // State implements plan.Resource.
 func (d *Dir) State() plan.State {
-	return toState(d)
+	return ToState(d)
 }
 
 // QueryState implements plan.Resource.

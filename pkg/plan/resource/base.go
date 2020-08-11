@@ -2,29 +2,28 @@ package resource
 
 import "github.com/twelho/capi-existinginfra/pkg/plan"
 
-// base can be embedded into a struct to provide a default implementation of
+// Base can be embedded into a struct to provide a default implementation of
 // plan.Resource.
-type base struct {
-}
+type Base struct{}
 
-var _ plan.Resource = plan.RegisterResource(&base{})
+var _ plan.Resource = plan.RegisterResource(&Base{})
 
 // State implements plan.Resource.
-func (b *base) State() plan.State {
+func (b *Base) State() plan.State {
 	return plan.EmptyState
 }
 
 // QueryState implements plan.Resource.
-func (b *base) QueryState(runner plan.Runner) (plan.State, error) {
+func (b *Base) QueryState(runner plan.Runner) (plan.State, error) {
 	return plan.EmptyState, nil
 }
 
 // Apply implements plan.Resource.
-func (b *base) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
+func (b *Base) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
 	return true, nil
 }
 
 // Undo implements plan.Resource.
-func (b *base) Undo(runner plan.Runner, current plan.State) error {
+func (b *Base) Undo(runner plan.Runner, current plan.State) error {
 	return nil
 }

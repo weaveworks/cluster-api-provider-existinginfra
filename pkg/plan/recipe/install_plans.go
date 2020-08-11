@@ -2,12 +2,10 @@ package recipe
 
 import (
 	"fmt"
-	"io/ioutil"
 	"sort"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/apis/wksprovider/controller/manifests"
-	existinginfrav1 "github.com/twelho/capi-existinginfra/pkg/existinginfra/v1alpha3"
+	existinginfrav1 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/twelho/capi-existinginfra/pkg/plan"
 	"github.com/twelho/capi-existinginfra/pkg/plan/resource"
 	"github.com/twelho/capi-existinginfra/pkg/utilities/envcfg"
@@ -56,20 +54,6 @@ func BuildConfigPlan(files []*resource.File) plan.Resource {
 	b := plan.NewBuilder()
 	for idx, file := range files {
 		b.AddResource(fmt.Sprintf("install:config-file-%d", idx), file)
-	}
-	p, err := b.Plan()
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	return &p
-}
-
-// BuildConfigMapPlan creates a plan to handle config maps
-func BuildConfigMapPlan(manifests map[string][]byte, namespace string) plan.Resource {
-	b := plan.NewBuilder()
-	for name, manifest := range manifests {
-		remoteName := fmt.Sprintf("config-map-%s", name)
-		b.AddResource("install:"+remoteName, &resource.KubectlApply{Filename: object.String(remoteName), Manifest: manifest, Namespace: object.String(namespace)})
 	}
 	p, err := b.Plan()
 	if err != nil {
@@ -327,64 +311,6 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	return &p
 }
 
-// BuildCNIPlan creates a sub-plan to install the CNI plugin.
-func BuildCNIPlan(cni string, manifests [][]byte) plan.Resource {
-	b := plan.NewBuilder()
-
-	b.AddResource(
-		"install-cni:apply-manifests",
-		&resource.KubectlApply{Manifest: manifests[0], Filename: object.String(cni + ".yaml")},
-	)
-	if len(manifests) == 2 {
-		b.AddResource(
-			"install-cni:apply-manifests-ds",
-			&resource.KubectlApply{Manifest: manifests[1], Filename: object.String(cni + "-daemon-set" + ".yaml")},
-			plan.DependOn("install-cni:apply-manifests"))
-	}
-
-	p, err := b.Plan()
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	return &p
-}
-
-//BuildSealedSecretPlan creates a sub-plan to install sealed secrets so we can check secrets into GitHub for GitOps
-func BuildSealedSecretPlan(sealedSecretVersion, ns string, manifest []byte) plan.Resource {
-	b := plan.NewBuilder()
-	fileCRD, err := manifests.Manifests.Open("05_sealed_secret_crd.yaml")
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	manifestbytesCRD, err := ioutil.ReadAll(fileCRD)
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-
-	b.AddResource("install:sealed-secret-crd",
-		&resource.KubectlApply{Manifest: manifestbytesCRD, Filename: object.String("SealedSecretCRD.yaml"),
-			WaitCondition: "condition=Established"})
-
-	b.AddResource("install:sealed-secrets-key", &resource.KubectlApply{Manifest: manifest})
-	file, err := manifests.Manifests.Open("06_sealed_secret_controller.yaml")
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	manifestbytes, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-
-	b.AddResource("install:sealed-secrets-controller",
-		&resource.KubectlApply{Manifest: manifestbytes, Filename: object.String("SealedSecretController.yaml")},
-		plan.DependOn("install:sealed-secrets-key"))
-	p, err := b.Plan()
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	return &p
-}
-
 // BuildKubeadmPrejoinPlan creates a sub-plan to prepare for running
 // kubeadm join.
 func BuildKubeadmPrejoinPlan(kubernetesVersion string, useIPTables bool) plan.Resource {
@@ -399,31 +325,6 @@ func BuildKubeadmPrejoinPlan(kubernetesVersion string, useIPTables bool) plan.Re
 		"configure:kubeadm-force-reset",
 		&resource.Run{Script: object.String("kubeadm reset --force")},
 	)
-	p, err := b.Plan()
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	return &p
-}
-
-// BuildAddonPlan creates a plan containing all the addons from the cluster manifest
-func BuildAddonPlan(clusterManifestPath string, addons map[string][][]byte) plan.Resource {
-	b := plan.NewBuilder()
-	for name, manifests := range addons {
-		var previous *string
-		for i, m := range manifests {
-			resFile := fmt.Sprintf("%s-%02d", name, i)
-			resName := "install:addon:" + resFile
-			manRsc := &resource.KubectlApply{Manifest: m, Filename: object.String(resFile + ".yaml"), Namespace: object.String("addons")}
-
-			if previous != nil {
-				b.AddResource(resName, manRsc, plan.DependOn(*previous))
-			} else {
-				b.AddResource(resName, manRsc)
-			}
-			previous = &resName
-		}
-	}
 	p, err := b.Plan()
 	if err != nil {
 		log.Fatalf("%v", err)

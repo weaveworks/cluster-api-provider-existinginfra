@@ -13,7 +13,7 @@ import (
 
 // KubeSecret writes secrets to the filesystem where they can be picked up by daemons
 type KubeSecret struct {
-	base
+	Base
 
 	// SecretName is the name of the secret to read
 	SecretName string `structs:"secretName"`

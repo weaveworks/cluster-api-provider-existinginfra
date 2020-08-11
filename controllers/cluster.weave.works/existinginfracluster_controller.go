@@ -19,8 +19,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/go-logr/logr"
 	log "github.com/sirupsen/logrus"
@@ -32,7 +30,9 @@ import (
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 // ExistingInfraClusterReconciler reconciles a ExistingInfraCluster object
@@ -127,12 +127,4 @@ func (r *ExistingInfraClusterReconciler) recordEvent(object runtime.Object, even
 	default:
 		log.Debugf(messageFmt, args...)
 	}
-}
-
-// NewClusterReconciler creates a new cluster reconciler.
-func NewClusterReconciler(client client.Client, eventRecorder record.EventRecorder) (*ExistingInfraClusterReconciler, error) {
-	return &ExistingInfraClusterReconciler{
-		Client:        client,
-		eventRecorder: eventRecorder,
-	}, nil
 }

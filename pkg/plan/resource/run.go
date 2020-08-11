@@ -10,7 +10,7 @@ import (
 // Run is a resource running a script (which can be just a single command). Run
 // doesn't realise any state, Apply will always run the given script.
 type Run struct {
-	base
+	Base
 
 	Script       fmt.Stringer  `structs:"script"`
 	UndoScript   fmt.Stringer  `structs:"undoScript,omitempty"`
@@ -22,7 +22,7 @@ var _ plan.Resource = plan.RegisterResource(&Run{})
 
 // State implements plan.Resource.
 func (r *Run) State() plan.State {
-	return toState(r)
+	return ToState(r)
 }
 
 // Apply implements plan.Resource.

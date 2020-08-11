@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net"
 	"os"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/existinginfra/v1alpha3"
 	"github.com/twelho/capi-existinginfra/pkg/plan"
 	sshutil "github.com/twelho/capi-existinginfra/pkg/utilities/ssh"
 	"golang.org/x/crypto/ssh"
@@ -35,18 +33,6 @@ type Client struct {
 var _ plan.Runner = &Client{}
 
 const tcp = "tcp"
-
-func NewClientForMachine(m *v1alpha3.ExistingInfraMachineSpec, user, keyPath string, printOutputs bool) (*Client, error) {
-	ip := m.Public.Address
-	port := m.Public.Port
-	return NewClient(ClientParams{
-		User:           user,
-		Host:           ip,
-		Port:           port,
-		PrivateKeyPath: keyPath,
-		PrintOutputs:   printOutputs,
-	})
-}
 
 // NewClient instantiates a new SSH Client object.
 // N.B.: provide either the key (privateKey) or its path (privateKeyPath).
@@ -154,11 +140,6 @@ func (c *Client) handleSessionIO(action func(*ssh.Session) error) (string, error
 		return stdOutErr.String(), errors.Wrap(errStdErr, "failed while capturing stderr")
 	}
 	return stdOutErr.String(), nil
-}
-
-// RemoteAddr returns the remote address of this SSH client.
-func (c *Client) RemoteAddr() net.Addr {
-	return c.client.RemoteAddr()
 }
 
 // Close closes this high-level Client's underlying SSH connection.

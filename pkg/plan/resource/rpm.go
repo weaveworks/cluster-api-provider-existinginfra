@@ -56,7 +56,7 @@ var _ plan.Resource = plan.RegisterResource(&RPM{})
 
 // State implements plan.Resource.
 func (p *RPM) State() plan.State {
-	return toState(p)
+	return ToState(p)
 }
 
 func lowerRevisionThan(state1, state2 plan.State) bool {

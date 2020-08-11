@@ -34,7 +34,7 @@ var _ plan.Resource = plan.RegisterResource(&File{})
 
 // State implements plan.Resource.
 func (f *File) State() plan.State {
-	return toState(f)
+	return ToState(f)
 }
 
 // QueryState implements plan.Resource.

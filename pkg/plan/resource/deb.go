@@ -20,7 +20,7 @@ type Deb struct {
 var _ plan.Resource = plan.RegisterResource(&Deb{})
 
 func (d *Deb) State() plan.State {
-	return toState(d)
+	return ToState(d)
 }
 
 func (d *Deb) QueryState(runner plan.Runner) (plan.State, error) {

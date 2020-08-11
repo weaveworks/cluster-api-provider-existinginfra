@@ -6,16 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"strings"
 	"time"
 
 	gerrors "github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	existinginfrav1 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/twelho/capi-existinginfra/pkg/apis/wksprovider/machine/config"
 	"github.com/twelho/capi-existinginfra/pkg/apis/wksprovider/machine/os"
 	machineutil "github.com/twelho/capi-existinginfra/pkg/cluster/machine"
-	existinginfrav1 "github.com/twelho/capi-existinginfra/pkg/existinginfra/v1alpha3"
 	"github.com/twelho/capi-existinginfra/pkg/kubernetes/drain"
 	"github.com/twelho/capi-existinginfra/pkg/plan"
 	"github.com/twelho/capi-existinginfra/pkg/plan/recipe"
@@ -807,18 +806,6 @@ func (a *MachineController) setNodeLabel(ctx context.Context, node *corev1.Node,
 	return nil
 }
 
-//nolint:unused
-// TODO: Remove if really unused
-func (a *MachineController) removeNodeLabel(ctx context.Context, node *corev1.Node, label string) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
-		delete(node.Labels, label)
-	})
-	if err != nil {
-		return gerrors.Wrapf(err, "Failed to remove node label: %s for node: %s", label, node.Name)
-	}
-	return nil
-}
-
 func (a *MachineController) modifyNode(ctx context.Context, node *corev1.Node, updater func(node *corev1.Node)) error {
 	contextLog := log.WithFields(log.Fields{"node": node.Name})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -902,25 +889,6 @@ func (a *MachineController) findNodeByID(ctx context.Context, machineID, systemU
 		}
 	}
 	return nil, apierrs.NewNotFound(schema.GroupResource{Group: "", Resource: "nodes"}, "")
-}
-
-//nolint:unused
-// TODO: Needed for getMasterNode()
-var staticRand = rand.New(rand.NewSource(time.Now().Unix()))
-
-//nolint:unused
-// TODO: Remove if really unused
-func (a *MachineController) getMasterNode(ctx context.Context) (*corev1.Node, error) {
-	masters, err := a.getMasterNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(masters) == 0 {
-		return nil, errors.New("no master node found")
-	}
-	// Randomise to limit chances of always hitting the same master node:
-	index := staticRand.Intn(len(masters))
-	return masters[index], nil
 }
 
 func (a *MachineController) getMasterNodes(ctx context.Context) ([]*corev1.Node, error) {
@@ -1015,7 +983,7 @@ func (a *MachineController) SetupWithManager(mgr ctrl.Manager, options controlle
 		Watches(
 			&source.Kind{Type: &clusterv1.Machine{}},
 			&handler.EnqueueRequestsFromMapFunc{
-				ToRequests: util.MachineToInfrastructureMapFunc(existinginfrav1.SchemeGroupVersion.WithKind("ExistingInfraMachine")),
+				ToRequests: util.MachineToInfrastructureMapFunc(existinginfrav1.GroupVersion.WithKind("ExistingInfraMachine")),
 			},
 		).
 		// TODO: add watch to reconcile all machines that need it

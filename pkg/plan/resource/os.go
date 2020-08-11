@@ -72,8 +72,6 @@ func NewOS(r plan.Runner) (*OS, error) {
 	return osr, nil
 }
 
-type ReadFileCmdFunc func(s ...string) string
-
 type GatherFactFunc func(o *OS, r plan.Runner) error
 
 type factGatheringParams struct {
@@ -110,7 +108,7 @@ var (
 
 // State implements plan.Resource.
 func (p *OS) State() plan.State {
-	return toState(p)
+	return ToState(p)
 }
 
 var gatherFuncs []GatherFactFunc = []GatherFactFunc{
