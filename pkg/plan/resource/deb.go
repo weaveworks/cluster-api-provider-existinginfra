@@ -3,7 +3,7 @@ package resource
 import (
 	"fmt"
 
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
 // Deb represents a .deb package.

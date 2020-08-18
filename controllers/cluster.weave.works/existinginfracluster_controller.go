@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	log "github.com/sirupsen/logrus"
-	clusterweaveworksv1alpha3 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
+	clusterweaveworksv1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"

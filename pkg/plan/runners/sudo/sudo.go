@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
 // Runner wraps the inner Runner with sudo.

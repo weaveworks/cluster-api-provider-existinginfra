@@ -24,7 +24,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	clusterweaveworksv1alpha3 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
+	clusterweaveworksv1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 )
 
 // ExistingInfraBootstrapReconciler reconciles a ExistingInfraMachine object

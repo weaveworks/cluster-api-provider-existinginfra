@@ -19,7 +19,7 @@ package v1alpha1
 import (
 	"errors"
 
-	"github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"k8s.io/apimachinery/pkg/conversion"
 )
 

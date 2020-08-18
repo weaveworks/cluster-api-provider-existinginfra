@@ -1,4 +1,4 @@
-module github.com/twelho/capi-existinginfra
+module github.com/weaveworks/cluster-api-provider-existinginfra
 
 go 1.13
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/cavaliercoder/go-rpm/version"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
 // RPM represents an RPM package.

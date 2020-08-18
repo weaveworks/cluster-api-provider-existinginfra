@@ -1,7 +1,7 @@
 package resource
 
 import (
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 
 	"github.com/fatih/structs"
 )

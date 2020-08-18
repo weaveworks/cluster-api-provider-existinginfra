@@ -1,2 +1,2 @@
-# capi-existinginfra
-CAPI-compliant wksctl provider for existing infrastructure using kubebuilder
+# cluster-api-provider-existinginfra
+CAPI provider for existing infrastructure

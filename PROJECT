@@ -1,5 +1,5 @@
 multigroup: true
-repo: github.com/twelho/capi-existinginfra
+repo: github.com/weaveworks/cluster-api-provider-existinginfra
 resources:
 - group: cluster.weave.works
   kind: ExistingInfraCluster

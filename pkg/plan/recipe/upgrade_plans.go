@@ -3,10 +3,10 @@ package recipe
 import (
 	"fmt"
 
-	"github.com/twelho/capi-existinginfra/pkg/plan"
-	"github.com/twelho/capi-existinginfra/pkg/plan/resource"
-	"github.com/twelho/capi-existinginfra/pkg/utilities/object"
-	"github.com/twelho/capi-existinginfra/pkg/utilities/version"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 )
 
 type NodeType int

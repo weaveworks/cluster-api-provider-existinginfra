@@ -3,8 +3,8 @@ package envcfg
 import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
-	"github.com/twelho/capi-existinginfra/pkg/plan/resource"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 )
 
 type EnvSpecificConfig struct {

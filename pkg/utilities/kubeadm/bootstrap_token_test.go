@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/twelho/capi-existinginfra/pkg/utilities/kubeadm"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
 )
 
 func TestGenerateBootstrapToken(t *testing.T) {

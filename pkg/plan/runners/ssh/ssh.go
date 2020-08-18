@@ -8,8 +8,8 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
-	sshutil "github.com/twelho/capi-existinginfra/pkg/utilities/ssh"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+	sshutil "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/ssh"
 	"golang.org/x/crypto/ssh"
 )
 

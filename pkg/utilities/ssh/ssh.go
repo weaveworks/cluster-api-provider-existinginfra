@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/twelho/capi-existinginfra/pkg/utilities/path"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/path"
 	"golang.org/x/crypto/ssh"
 )
 
