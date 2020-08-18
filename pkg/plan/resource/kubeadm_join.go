@@ -6,8 +6,8 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
-	"github.com/twelho/capi-existinginfra/pkg/utilities/version"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 )
 
 // KubeadmJoin represents an attempt to join a Kubernetes node via kubeadm.

@@ -26,9 +26,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	baremetalproviderspecv1alpha1 "github.com/twelho/capi-existinginfra/apis/baremetalproviderspec/v1alpha1"
-	clusterweaveworksv1alpha3 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
-	clusterweaveworkscontroller "github.com/twelho/capi-existinginfra/controllers/cluster.weave.works"
+	baremetalproviderspecv1alpha1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/baremetalproviderspec/v1alpha1"
+	clusterweaveworksv1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	clusterweaveworkscontroller "github.com/weaveworks/cluster-api-provider-existinginfra/controllers/cluster.weave.works"
 	// +kubebuilder:scaffold:imports
 )
 

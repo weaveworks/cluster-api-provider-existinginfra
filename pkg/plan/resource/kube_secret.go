@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/twelho/capi-existinginfra/pkg/apis/wksprovider/machine/scripts"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/scripts"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
 // KubeSecret writes secrets to the filesystem where they can be picked up by daemons

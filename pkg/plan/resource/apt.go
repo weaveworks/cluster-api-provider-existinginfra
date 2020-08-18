@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 
 	log "github.com/sirupsen/logrus"
 )

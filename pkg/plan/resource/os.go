@@ -6,7 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	reflections "gopkg.in/oleiade/reflections.v1"
 )
 

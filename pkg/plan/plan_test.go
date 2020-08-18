@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/twelho/capi-existinginfra/test/plan/testutils"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/test/plan/testutils"
 )
 
 // A non-pointer Resource to test that reflective instance creation works correctly

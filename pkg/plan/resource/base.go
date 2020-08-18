@@ -1,6 +1,6 @@
 package resource
 
-import "github.com/twelho/capi-existinginfra/pkg/plan"
+import "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 
 // Base can be embedded into a struct to provide a default implementation of
 // plan.Resource.

@@ -23,7 +23,7 @@ package v1alpha1
 import (
 	unsafe "unsafe"
 
-	v1alpha3 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
+	v1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )

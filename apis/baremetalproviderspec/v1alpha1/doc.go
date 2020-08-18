@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// +k8s:conversion-gen=github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3
+// +k8s:conversion-gen=github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3
 // +kubebuilder:skip
 package v1alpha1

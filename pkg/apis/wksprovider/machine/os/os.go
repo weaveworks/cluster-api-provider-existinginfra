@@ -8,13 +8,13 @@ import (
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	existinginfrav1 "github.com/twelho/capi-existinginfra/apis/cluster.weave.works/v1alpha3"
-	"github.com/twelho/capi-existinginfra/pkg/apis/wksprovider/machine/config"
-	"github.com/twelho/capi-existinginfra/pkg/plan"
-	"github.com/twelho/capi-existinginfra/pkg/plan/recipe"
-	"github.com/twelho/capi-existinginfra/pkg/plan/resource"
-	"github.com/twelho/capi-existinginfra/pkg/plan/runners/sudo"
-	"github.com/twelho/capi-existinginfra/pkg/utilities/envcfg"
+	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/config"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
 	v1 "k8s.io/api/core/v1"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/twelho/capi-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
 // dpkgQuerier can ask dpkg about packages installed in the system.

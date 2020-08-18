@@ -2,7 +2,7 @@ package machine
 
 import (
 	log "github.com/sirupsen/logrus"
-	"github.com/twelho/capi-existinginfra/pkg/kubernetes"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/kubernetes"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 )
 
