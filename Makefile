@@ -6,6 +6,11 @@ CRD_OPTIONS ?= "crd"
 API_ROOT := ./apis
 API_DIRS := ${API_ROOT}/baremetalproviderspec/v1alpha1,${API_ROOT}/cluster.weave.works/v1alpha3
 
+GOOS=$(shell go env GOOS)
+GOARCH=$(shell go env GOARCH)
+
+export KUBEBUILDER_ASSETS=$(shell pwd)/bin/kubebuilder
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -16,7 +21,7 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests
+test: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
 	go test ./... -coverprofile cover.out
 
 # Build manager binary
@@ -100,3 +105,7 @@ CONVERSION_GEN=$(GOBIN)/conversion-gen
 else
 CONVERSION_GEN=$(shell which conversion-gen)
 endif
+
+$(KUBEBUILDER_ASSETS):
+	mkdir -p $@
+	curl -sSL https://go.kubebuilder.io/dl/2.3.1/$(GOOS)/$(GOARCH) | tar -xz --strip-components=2 -C $@
