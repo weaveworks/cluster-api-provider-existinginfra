@@ -1,4 +1,4 @@
-package wks
+package controllers
 
 import (
 	"testing"
