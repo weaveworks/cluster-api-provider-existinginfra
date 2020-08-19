@@ -20,6 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// This runtime.Object/DeepCopy tag is here for MachineSpec, in order to facilitate easier
+// automated conversions from the earlier v1alpha1.
+// +kubebuilder:object:root=true
+
 // MachineSpec defines the desired state of ExistingInfraMachine
 type MachineSpec struct {
 	// This TypeMeta is not stored on encode, it is here just

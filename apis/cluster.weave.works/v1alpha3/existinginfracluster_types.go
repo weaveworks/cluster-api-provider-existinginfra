@@ -20,6 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// This runtime.Object/DeepCopy tag is here for ClusterSpec, in order to facilitate easier
+// automated conversions from the earlier v1alpha1.
+// +kubebuilder:object:root=true
+
 // ClusterSpec defines the desired state of ExistingInfraCluster
 type ClusterSpec struct {
 	// This TypeMeta is not stored on encode, it is here just
