@@ -22,7 +22,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
-	go test ./... -coverprofile cover.out
+	go test ./... -coverprofile cover.out -race -covermode=atomic
 
 # Build manager binary
 manager: generate fmt vet
