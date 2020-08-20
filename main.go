@@ -21,9 +21,14 @@ import (
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	clusterv1alpha3 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	baremetalproviderspecv1alpha1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/baremetalproviderspec/v1alpha1"
@@ -32,26 +37,42 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+// TODO: Ported from wksctl, should be removed
+const defaultNamespace = `weavek8sops`
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	// TODO: Concurrent reconciliations should not be limited, remove this when
+	// 	the ExistingInfra{Cluster,Machine} reconcilers have been refactored
+	opts = controller.Options{MaxConcurrentReconciles: 1}
 )
 
 func init() {
-	_ = clientgoscheme.AddToScheme(scheme)
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(clusterv1alpha3.AddToScheme(scheme))
 
-	_ = clusterweaveworksv1alpha3.AddToScheme(scheme)
-	_ = baremetalproviderspecv1alpha1.AddToScheme(scheme)
+	utilruntime.Must(clusterweaveworksv1alpha3.AddToScheme(scheme))
+	utilruntime.Must(baremetalproviderspecv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
 func main() {
+	// kubebuilder-generated flags
 	var metricsAddr string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+
+	// TODO: Legacy flags, these should be removed
+	var verbose bool
+	var providerName string
+	flag.BoolVar(&verbose, "verbose", false, "Verbose log output [legacy].")
+	flag.StringVar(&providerName, "provider-name", "wksctl", "The provider name for the controllers [legacy].")
+
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -68,19 +89,39 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfg, err := config.GetConfig()
+	if err != nil {
+		setupLog.Error(err, "failed to get the coordinates of the API server")
+		os.Exit(1)
+	}
+
+	clientSet, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create Kubernetes client set")
+		os.Exit(1)
+	}
+
 	if err = (&clusterweaveworkscontroller.ExistingInfraClusterReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ExistingInfraCluster"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraCluster")
 		os.Exit(1)
 	}
-	if err = (&clusterweaveworkscontroller.ExistingInfraMachineReconciler{
+	// TODO: Ported from wksctl, should be refactored
+	if err = clusterweaveworkscontroller.NewMachineControllerWithLegacyParams(&clusterweaveworkscontroller.MachineControllerParams{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ExistingInfraMachine"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+		// TODO: "Legacy" fields below, should be refactored/removed
+		EventRecorder: mgr.GetEventRecorderFor(providerName + "-controller"),
+		ClientSet:     clientSet,
+		// TODO: The ControllerNamespace is originally obtained from some machines in wksctl,
+		//  which is not portable for CAPEI. That needs to be changed as well.
+		ControllerNamespace: defaultNamespace,
+		Verbose:             verbose,
+	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraMachine")
 		os.Exit(1)
 	}
