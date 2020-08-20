@@ -1,0 +1,10 @@
+# .goreleaser.yml
+project_name: cluster-api-provider-existinginfra
+
+# TODO: This should be populated with the build targets (e.g. docker images), so they are automatically uploaded.
+build:
+  skip: true
+
+# This automatically closes any milestone named the same as the tag
+milestones:
+- close: true
