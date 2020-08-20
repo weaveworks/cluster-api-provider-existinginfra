@@ -1024,8 +1024,22 @@ func (r *ExistingInfraMachineReconciler) SetupWithManager(mgr ctrl.Manager) erro
 // MachineControllerParams groups required inputs to create a machine actuator.
 type MachineControllerParams struct {
 	Client              client.Client
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
 	ClientSet           *kubernetes.Clientset
 	ControllerNamespace string
 	EventRecorder       record.EventRecorder
 	Verbose             bool
+}
+
+func NewMachineController(params *MachineControllerParams) *ExistingInfraMachineReconciler {
+	return &ExistingInfraMachineReconciler{
+		Client:              params.Client,
+		Log:                 params.Log,
+		Scheme:              params.Scheme,
+		clientSet:           params.ClientSet,
+		controllerNamespace: params.ControllerNamespace,
+		eventRecorder:       params.EventRecorder,
+		verbose:             params.Verbose,
+	}
 }
