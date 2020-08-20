@@ -43,6 +43,10 @@ const defaultNamespace = `weavek8sops`
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	// TODO: Concurrent reconciliations should not be limited, remove this when
+	// 	the ExistingInfra{Cluster,Machine} reconcilers have been refactored
+	opts = controller.Options{MaxConcurrentReconciles: 1}
 )
 
 func init() {
@@ -55,17 +59,20 @@ func init() {
 }
 
 func main() {
+	// kubebuilder-generated flags
 	var metricsAddr string
-	var providerName string
 	var enableLeaderElection bool
-	var verbose bool
-	// TODO: Get rid of the legacy flags
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&providerName, "provider-name", "wksctl", "The provider name for the controllers [legacy].")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+
+	// TODO: Legacy flags, these should be removed
+	var verbose bool
+	var providerName string
 	flag.BoolVar(&verbose, "verbose", false, "Verbose log output [legacy].")
+	flag.StringVar(&providerName, "provider-name", "wksctl", "The provider name for the controllers [legacy].")
+
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -85,6 +92,7 @@ func main() {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		setupLog.Error(err, "failed to get the coordinates of the API server")
+		os.Exit(1)
 	}
 
 	clientSet, err := kubernetes.NewForConfig(cfg)
@@ -97,22 +105,23 @@ func main() {
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ExistingInfraCluster"),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManagerOptions(mgr, controller.Options{MaxConcurrentReconciles: 1}); err != nil {
+	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraCluster")
 		os.Exit(1)
 	}
 	// TODO: Ported from wksctl, should be refactored
-	if err = clusterweaveworkscontroller.NewMachineController(&clusterweaveworkscontroller.MachineControllerParams{
+	if err = clusterweaveworkscontroller.NewMachineControllerWithLegacyParams(&clusterweaveworkscontroller.MachineControllerParams{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("ExistingInfraMachine"),
+		Scheme: mgr.GetScheme(),
+		// TODO: "Legacy" fields below, should be refactored/removed
 		EventRecorder: mgr.GetEventRecorderFor(providerName + "-controller"),
-		Client:        mgr.GetClient(),
-		Log:           ctrl.Log.WithName("controllers").WithName("ExistingInfraMachine"),
 		ClientSet:     clientSet,
 		// TODO: The ControllerNamespace is originally obtained from some machines in wksctl,
-		//  which is not portable for CAPEI. This needs to be changed too.
+		//  which is not portable for CAPEI. That needs to be changed as well.
 		ControllerNamespace: defaultNamespace,
 		Verbose:             verbose,
-		Scheme:              mgr.GetScheme(),
-	}).SetupWithManagerOptions(mgr, controller.Options{MaxConcurrentReconciles: 1}); err != nil {
+	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraMachine")
 		os.Exit(1)
 	}

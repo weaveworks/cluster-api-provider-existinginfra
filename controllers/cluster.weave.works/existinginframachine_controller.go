@@ -1032,7 +1032,7 @@ type MachineControllerParams struct {
 	Verbose             bool
 }
 
-func NewMachineController(params *MachineControllerParams) *ExistingInfraMachineReconciler {
+func NewMachineControllerWithLegacyParams(params *MachineControllerParams) *ExistingInfraMachineReconciler {
 	return &ExistingInfraMachineReconciler{
 		Client:              params.Client,
 		Log:                 params.Log,
