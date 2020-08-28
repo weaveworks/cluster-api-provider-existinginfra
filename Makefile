@@ -24,8 +24,9 @@ all: manager
 test: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
 	go test ./... -coverprofile cover.out -race -covermode=atomic
 
-test-debug: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
-	go test ~/src/go/bin/dlv test --check-go-version=false
+debug-test: generate fmt vet manifests $(KUBEBUILDER_ASSETS) main
+	go test -c
+	dlv --wd . debug --check-go-version=false
 
 # Build manager binary
 manager: generate fmt vet
