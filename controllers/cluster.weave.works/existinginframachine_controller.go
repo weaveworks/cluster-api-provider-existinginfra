@@ -176,13 +176,10 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err := installer.SetupNode(nodePlan); err != nil {
 		return gerrors.Wrapf(err, "failed to set up machine %s", machine.Name)
 	}
-	ids, err := installer.IDs()
+	addr := a.getMachineAddress(eim)
+	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
-		return gerrors.Wrapf(err, "failed to read machine %s's IDs", machine.Name)
-	}
-	node, err := a.findNodeByID(ctx, ids.MachineID, ids.SystemUUID)
-	if err != nil {
-		return err
+		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
 	}
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
@@ -338,19 +335,10 @@ func (a *ExistingInfraMachineReconciler) installNewBootstrapToken(ctx context.Co
 func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) error {
 	contextLog := log.WithFields(log.Fields{"machine": machine.Name, "cluster": c.Name})
 	contextLog.Info("deleting machine ...")
-
-	os, closer, err := a.connectTo(ctx, c, eim)
+	addr := a.getMachineAddress(eim)
+	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
-		return gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name)
-	}
-	defer closer.Close()
-	ids, err := os.IDs()
-	if err != nil {
-		return gerrors.Wrapf(err, "failed to read machine %s's IDs", machine.Name)
-	}
-	node, err := a.findNodeByID(ctx, ids.MachineID, ids.SystemUUID)
-	if err != nil {
-		return err
+		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
 	}
 	// Check if there's an adequate number of masters
 	isMaster := isMaster(node)
@@ -385,16 +373,13 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	}
 	defer closer.Close()
 
-	ids, err := installer.IDs()
-	if err != nil {
-		return gerrors.Wrapf(err, "failed to read machine %s's IDs", machine.Name)
-	}
-	node, err := a.findNodeByID(ctx, ids.MachineID, ids.SystemUUID)
+	addr := a.getMachineAddress(eim)
+	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
 		if apierrs.IsNotFound(err) { // isn't there; try to create it
 			return a.create(ctx, installer, c, machine, eim)
 		}
-		return gerrors.Wrapf(err, "failed to find node by id: %s/%s", ids.MachineID, ids.SystemUUID)
+		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
 	}
 	contextLog = contextLog.WithFields(log.Fields{"node": node.Name})
 
@@ -897,18 +882,28 @@ func hasTaint(node *corev1.Node, value string) bool {
 	return false
 }
 
-func (a *ExistingInfraMachineReconciler) findNodeByID(ctx context.Context, machineID, systemUUID string) (*corev1.Node, error) {
+func (a *ExistingInfraMachineReconciler) findNodeByPrivateAddress(ctx context.Context, addr string) (*corev1.Node, error) {
 	var nodes corev1.NodeList
 	err := a.Client.List(ctx, &nodes)
 	if err != nil {
 		return nil, gerrors.Wrap(err, "failed to list nodes")
 	}
 	for _, node := range nodes.Items {
-		if node.Status.NodeInfo.MachineID == machineID && node.Status.NodeInfo.SystemUUID == systemUUID {
+		if getNodePrivateAddress(&node) == addr {
 			return &node, nil
 		}
 	}
 	return nil, apierrs.NewNotFound(schema.GroupResource{Group: "", Resource: "nodes"}, "")
+}
+
+// getNodePrivateAddress looks through the addresses for a node and extracts the private address
+func getNodePrivateAddress(node *corev1.Node) string {
+	for _, addr := range node.Status.Addresses {
+		if addr.Type == "InternalIP" {
+			return addr.Address
+		}
+	}
+	return ""
 }
 
 func (a *ExistingInfraMachineReconciler) getMasterNodes(ctx context.Context) ([]*corev1.Node, error) {
