@@ -40,6 +40,11 @@ install: manifests
 uninstall: manifests
 	kustomize build config/crd | kubectl delete -f -
 
+# Clean up images and binaries
+clean:
+	rm -f bin/manager
+	docker rmi ${IMG}
+
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
 	cd config/manager && kustomize edit set image controller=${IMG}
@@ -61,7 +66,7 @@ vet:
 generate: controller-gen conversion-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(CONVERSION_GEN) \
-		--output-base . \
+		--output-base ../../. \
 		--input-dirs ${API_DIRS} \
 		-O zz_generated.conversion \
 		-h hack/boilerplate.go.txt
