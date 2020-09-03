@@ -62,6 +62,42 @@ func BuildConfigPlan(files []*resource.File) plan.Resource {
 	return &p
 }
 
+// BuildConfigMapPlan creates a plan to handle config maps
+func BuildConfigMapPlan(manifests map[string][]byte, namespace string) plan.Resource {
+	b := plan.NewBuilder()
+	for name, manifest := range manifests {
+		remoteName := fmt.Sprintf("config-map-%s", name)
+		b.AddResource("install:"+remoteName, &resource.KubectlApply{Filename: object.String(remoteName), Manifest: manifest, Namespace: object.String(namespace)})
+	}
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return &p
+}
+
+// BuildCNIPlan creates a sub-plan to install the CNI plugin.
+func BuildCNIPlan(cni string, manifests [][]byte) plan.Resource {
+	b := plan.NewBuilder()
+
+	b.AddResource(
+		"install-cni:apply-manifests",
+		&resource.KubectlApply{Manifest: manifests[0], Filename: object.String(cni + ".yaml")},
+	)
+	if len(manifests) == 2 {
+		b.AddResource(
+			"install-cni:apply-manifests-ds",
+			&resource.KubectlApply{Manifest: manifests[1], Filename: object.String(cni + "-daemon-set" + ".yaml")},
+			plan.DependOn("install-cni:apply-manifests"))
+	}
+
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return &p
+}
+
 // BuildCRIPlan creates a plan for installing a CRI.  Currently, Docker is the only supported CRI
 func BuildCRIPlan(criSpec *existinginfrav1.ContainerRuntime, cfg *envcfg.EnvSpecificConfig, pkgType resource.PkgType) plan.Resource {
 	b := plan.NewBuilder()

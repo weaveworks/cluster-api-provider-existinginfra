@@ -31,6 +31,7 @@ type ClusterSpec struct {
 	metav1.TypeMeta `json:"-"`
 
 	User                 string `json:"user"`
+	Version              string `json:"kubernetesVersion,omitempty"`
 	DeprecatedSSHKeyPath string `json:"sshKeyPath,omitempty"`
 	HTTPProxy            string `json:"httpProxy,omitempty"`
 
@@ -90,6 +91,7 @@ type FileSpec struct {
 type SourceSpec struct {
 	ConfigMap string `json:"configmap"`
 	Key       string `json:"key"`
+	Contents  string `json:"contents,omitempty"`
 }
 
 type ContainerRuntime struct {
