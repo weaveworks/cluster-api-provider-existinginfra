@@ -31,6 +31,11 @@ CRDS=$(shell find config/crd -name '*.yaml' -print)
 pkg/apis/wksprovider/machine/crds/crds_vfsdata.go: $(CRDS)
 	go generate ./pkg/apis/wksprovider/machine/crds
 
+# Generate CRDs
+CRDS=$(shell find config/crd -name '*.yaml' -print)
+pkg/apis/wksprovider/machine/crds_vfsdata.go: $(CRDS)
+	go generate ./pkg/apis/wksprovider/machine/crds
+
 # Build manager binary
 manager: pkg/apis/wksprovider/machine/crds/crds_vfsdata.go generate fmt vet
 	go build -ldflags "-X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.Version=$(VERSION)" -o bin/manager main.go
