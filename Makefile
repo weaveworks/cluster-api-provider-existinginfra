@@ -1,5 +1,6 @@
-VERSION=$(shell git describe --always --match "v*")
-IMAGE_TAG := $(shell tools/image-tag)
+IMAGE_TAG := $(shell hack/image-tag)
+# Image URL to use all building/pushing image targets
+IMG ?= weaveworks/cluster-api-existinginfra-controller:$(IMAGE_TAG)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd"
 
