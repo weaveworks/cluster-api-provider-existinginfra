@@ -16,3 +16,4 @@ jobs:
         with:
           # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
           version: v1.30
+          args: --new-from-rev dc07dd97bb2688ad31c399a8651e386ee052146b
