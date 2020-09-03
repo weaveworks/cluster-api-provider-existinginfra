@@ -130,6 +130,7 @@ spec:
                 - value
                 type: object
               type: array
+<<<<<<< HEAD
             kubernetesVersion:
               type: string
             controlPlaneMachineCount:
@@ -138,6 +139,8 @@ spec:
               type: string
             workloadCluster:
               type: boolean
+=======
+>>>>>>> a241a2e... initial start
             os:
               properties:
                 files:
@@ -151,8 +154,11 @@ spec:
                             type: string
                           key:
                             type: string
+<<<<<<< HEAD
                           contents:
                             type: string
+=======
+>>>>>>> a241a2e... initial start
                         required:
                         - configmap
                         - key
@@ -165,6 +171,10 @@ spec:
               type: object
           required:
           - cri
+<<<<<<< HEAD
+=======
+          - user
+>>>>>>> a241a2e... initial start
           type: object
         status:
           properties:
