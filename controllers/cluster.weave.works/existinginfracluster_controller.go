@@ -21,18 +21,25 @@ import (
 	"errors"
 
 	"github.com/go-logr/logr"
+	gerrors "github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	clusterweaveworksv1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+)
+
+const (
+	LocalController = "wks.weave.works/local-controller"
+	Creating        = "wks.weave.works/is-creating"
 )
 
 // ExistingInfraClusterReconciler reconciles a ExistingInfraCluster object
@@ -58,6 +65,13 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	if _, found := eic.Annotations[LocalController]; !found {
+		if _, found = eic.Annotations[Creating]; !found {
+			r.setClusterAnnotation(ctx, eic, Creating, "true")
+			setupInitialWorkloadCluster(eic)
+		}
 	}
 
 	// Get Cluster via OwnerReferences
@@ -117,6 +131,40 @@ func (r *ExistingInfraClusterReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 	return r.newBuilderWithMgr(mgr).WithOptions(options).Complete(r)
 }
 
+func (a *ExistingInfraClusterReconciler) setClusterAnnotation(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, key, value string) error {
+	err := a.modifyCluster(ctx, eic, func(node *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+		eic.Annotations[key] = value
+	})
+	if err != nil {
+		return gerrors.Wrapf(err, "Failed to set annotation: %s for cluster: %s", key, eic.Name)
+	}
+	return nil
+}
+
+func (a *ExistingInfraClusterReconciler) modifyCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
+	contextLog := log.WithFields(log.Fields{"cluster": eic.Name})
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var result clusterweaveworksv1alpha3.ExistingInfraCluster
+		getErr := a.Client.Get(ctx, client.ObjectKey{Name: eic.Name}, &result)
+		if getErr != nil {
+			contextLog.Errorf("failed to read cluster info, assuming unsafe to update: %v", getErr)
+			return getErr
+		}
+		updater(&result)
+		updateErr := a.Client.Update(ctx, &result)
+		if updateErr != nil {
+			contextLog.Errorf("failed attempt to update cluster annotation: %v", updateErr)
+			return updateErr
+		}
+		return nil
+	})
+	if retryErr != nil {
+		contextLog.Errorf("failed to update cluster annotation: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "Could not mark cluster %s as updated", eic.Name)
+	}
+	return nil
+}
+
 func (r *ExistingInfraClusterReconciler) recordEvent(object runtime.Object, eventType, reason, messageFmt string, args ...interface{}) {
 	r.eventRecorder.Eventf(object, eventType, reason, messageFmt, args...)
 	switch eventType {
@@ -127,4 +175,8 @@ func (r *ExistingInfraClusterReconciler) recordEvent(object runtime.Object, even
 	default:
 		log.Debugf(messageFmt, args...)
 	}
+}
+
+func setupInitialWorkloadCluster(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+
 }

@@ -24,8 +24,13 @@ all: manager
 test: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
 	go test ./... -coverprofile cover.out -race -covermode=atomic
 
+# Generate CRDs
+CRDS=$(shell find config/crd -name '*.yaml' -print)
+pkg/apis/wksprovider/machine/crds_vfsdata.go: $(CRDS)
+	go generate ./pkg/apis/wksprovider/machine/crds
+
 # Build manager binary
-manager: generate fmt vet
+manager: pkg/apis/wksprovider/machine/crds_vfsdata.go generate fmt vet
 	go build -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
@@ -76,7 +81,7 @@ docker-build: test
 	docker build . -t ${IMG}
 
 # Push the docker image
-docker-push:
+push: docker-build
 	docker push ${IMG}
 
 # find or download controller-gen

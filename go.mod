@@ -3,6 +3,8 @@ module github.com/weaveworks/cluster-api-provider-existinginfra
 go 1.13
 
 require (
+	github.com/bitnami-labs/sealed-secrets v0.12.5
+	github.com/blang/semver v3.5.1+incompatible
 	github.com/cavaliercoder/go-rpm v0.0.0-20200122174316-8cb9fd9c31a8
 	github.com/chanwit/plandiff v1.0.0
 	github.com/fatih/structs v1.1.0
@@ -11,6 +13,8 @@ require (
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.9.1
+	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
+	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.4.0
 	github.com/weaveworks/libgitops v0.0.2
