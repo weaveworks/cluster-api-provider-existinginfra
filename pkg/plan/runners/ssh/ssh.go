@@ -16,10 +16,10 @@ import (
 // ClientParams groups inputs to build a client object.
 type ClientParams struct {
 	User           string
-	Host           string
-	Port           uint16
 	PrivateKeyPath string
 	PrivateKey     []byte
+	Host           string
+	Port           uint16
 	PrintOutputs   bool
 }
 
