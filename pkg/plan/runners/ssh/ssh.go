@@ -76,7 +76,7 @@ func (c *Client) RunCommand(command string, stdin io.Reader) (string, error) {
 	})
 }
 
-// Handle output and command completion for a remote shell
+// Handle output and command completion for a remote shell.
 func (c *Client) handleSessionIO(action func(*ssh.Session) error) (string, error) {
 	session, err := c.client.NewSession()
 	if err != nil {

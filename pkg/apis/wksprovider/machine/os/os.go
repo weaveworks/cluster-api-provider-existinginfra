@@ -235,7 +235,7 @@ func fetchOSID(sshClient plan.Runner) (string, error) {
 	return strings.Trim(matches[idxOSID], ` "`), nil
 }
 
-// CreatePlan generates a plan from a plan builder
+// CreatePlan generates a plan from a plan builder.
 func CreatePlan(b *plan.Builder) (*plan.Plan, error) {
 	p, err := b.Plan()
 	if err != nil {
