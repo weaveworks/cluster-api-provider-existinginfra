@@ -6,11 +6,11 @@ import (
 )
 
 func Jump(nodeVersion, machineVersion string) (bool, error) {
-	nodemajor, nodeminor, _, err := parseVersion(nodeVersion)
+	nodemajor, nodeminor, err := parseVersion(nodeVersion)
 	if err != nil {
 		return false, err
 	}
-	machinemajor, machineminor, _, err := parseVersion(machineVersion)
+	machinemajor, machineminor, err := parseVersion(machineVersion)
 	if err != nil {
 		return false, err
 	}
@@ -29,10 +29,10 @@ func LessThan(s1, s2 string) (bool, error) {
 	return v1.LessThan(v2), nil
 }
 
-func parseVersion(s string) (int, int, int, error) {
+func parseVersion(s string) (int, int, error) {
 	v, err := version.ParseSemantic(s)
 	if err != nil {
-		return -1, -1, -1, errors.Wrap(err, "invalid kubernetes version")
+		return -1, -1, errors.Wrap(err, "invalid kubernetes version")
 	}
-	return int(v.Major()), int(v.Minor()), int(v.Patch()), nil
+	return int(v.Major()), int(v.Minor()), nil
 }
