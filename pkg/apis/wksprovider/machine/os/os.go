@@ -23,6 +23,11 @@ const (
 	ConfigDestDir = "/etc/pki/weaveworks/wksctl"
 )
 
+var (
+	ErrNoConfigData = errors.New("no config data for filespec")
+	ErrUnknownOS    = errors.New("unknown operating system")
+)
+
 // OS represents an operating system and exposes the operations required to
 // install Kubernetes on a machine setup with that OS.
 type OS struct {
@@ -61,7 +66,7 @@ func CreateConfigFileResourcesFromConfigMaps(fileSpecs []existinginfrav1.FileSpe
 		// if not in Data, check BinaryData
 		binaryContents, ok := configMaps[source.ConfigMap].BinaryData[source.Key]
 		if !ok {
-			return nil, fmt.Errorf("No config data for filespec: %v", file)
+			return nil, fmt.Errorf("%q: %w", file, ErrNoConfigData)
 		}
 		fileResource.Content = string(binaryContents)
 		fileResources[idx] = fileResource
@@ -207,7 +212,7 @@ func Identify(sshClient plan.Runner) (*OS, error) {
 	case Ubuntu:
 		return &OS{Name: osID, Runner: &sudo.Runner{Runner: sshClient}, PkgType: resource.PkgTypeDeb}, nil
 	default:
-		return nil, fmt.Errorf("unknown operating system %q", osID)
+		return nil, fmt.Errorf("%q: %w", osID, ErrUnknownOS)
 	}
 }
 
