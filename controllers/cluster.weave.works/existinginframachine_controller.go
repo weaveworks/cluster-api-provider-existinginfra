@@ -824,14 +824,14 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeNam
 		updater(&result)
 		updateErr := a.Client.Update(ctx, &result)
 		if updateErr != nil {
-			contextLog.Errorf("failed attempt to update node annotation: %v", updateErr)
+			contextLog.Errorf("failed attempt to update node: %v", updateErr)
 			return updateErr
 		}
 		return nil
 	})
 	if retryErr != nil {
-		contextLog.Errorf("failed to update node annotation: %v", retryErr)
-		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", nodeName)
+		contextLog.Errorf("failed to update node: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "could not update node %s", nodeName)
 	}
 	return nil
 }
