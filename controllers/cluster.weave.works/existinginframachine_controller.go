@@ -184,7 +184,7 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, nodePlan.ToJSON()); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToJSON()); err != nil {
 		return err
 	}
 	// CAPI machine controller requires providerID
@@ -476,7 +476,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		return err
 	}
 
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, planJSON); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
 		return err
 	}
 	// CAPI machine controller requires providerID
@@ -515,7 +515,7 @@ func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Contex
 		return err
 	}
 	log.Info("Finished with uncordon...")
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, planJSON); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
 		return err
 	}
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
@@ -733,7 +733,7 @@ func (a *ExistingInfraMachineReconciler) getOriginalMasterNode(ctx context.Conte
 	// So we just pick nodes[0] of the list, then label it.
 	originalMasterNode := nodes[0]
 	if _, exist := originalMasterNode.Labels[originalMasterLabel]; !exist {
-		if err := a.setNodeLabel(ctx, originalMasterNode, originalMasterLabel, ""); err != nil {
+		if err := a.setNodeLabel(ctx, originalMasterNode.Name, originalMasterLabel, ""); err != nil {
 			return nil, err
 		}
 	}
@@ -781,18 +781,19 @@ func (a *ExistingInfraMachineReconciler) uncordon(ctx context.Context, node *cor
 	return nil
 }
 
-func (a *ExistingInfraMachineReconciler) setNodeAnnotation(ctx context.Context, node *corev1.Node, key, value string) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
+func (a *ExistingInfraMachineReconciler) setNodeAnnotation(ctx context.Context, nodeName string, key, value string) error {
+	err := a.modifyNode(ctx, nodeName, func(node *corev1.Node) {
 		node.Annotations[key] = value
 	})
 	if err != nil {
-		return gerrors.Wrapf(err, "Failed to set node annotation: %s for node: %s", key, node.Name)
+		return gerrors.Wrapf(err, "Failed to set node annotation: %s for node: %s", key, nodeName)
 	}
 	return nil
 }
 
+// Note: does not modify the Node passed in
 func (a *ExistingInfraMachineReconciler) setNodeProviderIDIfNecessary(ctx context.Context, node *corev1.Node) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
+	err := a.modifyNode(ctx, node.Name, func(node *corev1.Node) {
 		node.Spec.ProviderID = "wks://" + node.Name
 	})
 	if err != nil {
@@ -801,21 +802,21 @@ func (a *ExistingInfraMachineReconciler) setNodeProviderIDIfNecessary(ctx contex
 	return nil
 }
 
-func (a *ExistingInfraMachineReconciler) setNodeLabel(ctx context.Context, node *corev1.Node, label, value string) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
+func (a *ExistingInfraMachineReconciler) setNodeLabel(ctx context.Context, nodeName string, label, value string) error {
+	err := a.modifyNode(ctx, nodeName, func(node *corev1.Node) {
 		node.Labels[label] = value
 	})
 	if err != nil {
-		return gerrors.Wrapf(err, "Failed to set node label: %s for node: %s", label, node.Name)
+		return gerrors.Wrapf(err, "Failed to set node label: %s for node: %s", label, nodeName)
 	}
 	return nil
 }
 
-func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, node *corev1.Node, updater func(node *corev1.Node)) error {
-	contextLog := log.WithFields(log.Fields{"node": node.Name})
+func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeName string, updater func(node *corev1.Node)) error {
+	contextLog := log.WithFields(log.Fields{"node": nodeName})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result corev1.Node
-		getErr := a.Client.Get(ctx, client.ObjectKey{Name: node.Name}, &result)
+		getErr := a.Client.Get(ctx, client.ObjectKey{Name: nodeName}, &result)
 		if getErr != nil {
 			contextLog.Errorf("failed to read node info, assuming unsafe to update: %v", getErr)
 			return getErr
@@ -830,7 +831,7 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, node *c
 	})
 	if retryErr != nil {
 		contextLog.Errorf("failed to update node annotation: %v", retryErr)
-		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", node.Name)
+		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", nodeName)
 	}
 	return nil
 }
