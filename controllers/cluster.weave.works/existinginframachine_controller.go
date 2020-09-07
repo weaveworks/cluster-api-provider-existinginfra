@@ -887,8 +887,8 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeNam
 		return nil
 	})
 	if retryErr != nil {
-		contextLog.Errorf("failed to update node: %v", retryErr)
-		return gerrors.Wrapf(retryErr, "could not update node %s", nodeName)
+		contextLog.Errorf("failed to update node annotation: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", nodeName)
 	}
 	return nil
 }
