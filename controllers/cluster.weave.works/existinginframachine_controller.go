@@ -188,7 +188,7 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 		return err
 	}
 	// CAPI machine controller requires providerID
-	eim.Spec.ProviderID = node.Spec.ProviderID
+	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
 	a.recordEvent(machine, corev1.EventTypeNormal, "Create", "created machine %s", machine.Name)
 	return nil
@@ -480,7 +480,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		return err
 	}
 	// CAPI machine controller requires providerID
-	eim.Spec.ProviderID = node.Spec.ProviderID
+	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
 
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
@@ -791,10 +791,14 @@ func (a *ExistingInfraMachineReconciler) setNodeAnnotation(ctx context.Context, 
 	return nil
 }
 
+func generateProviderID(nodeName string) string {
+	return "wks://" + nodeName
+}
+
 // Note: does not modify the Node passed in
 func (a *ExistingInfraMachineReconciler) setNodeProviderIDIfNecessary(ctx context.Context, node *corev1.Node) error {
 	err := a.modifyNode(ctx, node.Name, func(node *corev1.Node) {
-		node.Spec.ProviderID = "wks://" + node.Name
+		node.Spec.ProviderID = generateProviderID(node.Name)
 	})
 	if err != nil {
 		return gerrors.Wrapf(err, "Failed to set providerID on node: %s", node.Name)
