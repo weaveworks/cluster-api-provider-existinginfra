@@ -12,10 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"text/template"
 
-	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
-	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -279,7 +276,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 			AdditionalSANs:        params.AdditionalSANs,
 			Namespace:             object.String(params.Namespace),
 			NodeName:              cfg.HostnameOverride,
-			ExtraAPIServerArgs:    apiServerArgs,
+			ExtraAPIServerArgs:    map[string]string{},
 			// kubeadm currently accepts a single subnet for services and pods
 			// ref: https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1#Networking
 			// this should be ensured in the validation step in pkg.specs.validation.validateCIDRBlocks()
