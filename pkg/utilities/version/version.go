@@ -12,6 +12,7 @@ const (
 	emptyRange = ""
 )
 
+<<<<<<< HEAD
 var (
 	// The constant below is to be set by flags passed to `go build`.
 	// Example: -X version.Version=xxxxx
@@ -19,6 +20,8 @@ var (
 	Version = "undefined"
 )
 
+=======
+>>>>>>> 0595f63... move functionality needed by seed node back to capei repo
 // MatchesRange parses the provided version and versions range, and checks if
 // the provided version matches the provided range.
 func MatchesRange(version, versionsRange string) (bool, error) {
