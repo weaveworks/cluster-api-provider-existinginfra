@@ -48,7 +48,7 @@ uninstall: manifests
 # Clean up images and binaries
 clean:
 	rm -f bin/manager
-	docker rmi ${IMG}
+	docker rmi -f ${IMG}
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests

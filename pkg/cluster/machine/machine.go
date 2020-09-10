@@ -357,3 +357,46 @@ func getKubernetesVersion(machine *clusterv1.Machine) string {
 	log.WithField("machine", machine.Name).WithField("defaultVersion", kubernetes.DefaultVersion).Debug("No kubernetes version configured in manifest, falling back to default")
 	return kubernetes.DefaultVersion
 }
+
+// // GetKubernetesVersionFromManifest reads the version of the Kubernetes control
+// // plane from the provided machines' manifest. If no version is configured, the
+// // default Kubernetes version will be returned.
+// func GetKubernetesVersionFromManifest(machinesManifestPath string) (string, string, error) {
+//  machines, bl, err := ParseManifest(machinesManifestPath)
+//  if err != nil {
+//      return "", "", err
+//  }
+//  return GetKubernetesVersionFromMasterIn(machines, bl)
+// }
+
+// // GetKubernetesVersionFromMasterIn reads the version of the Kubernetes control
+// // plane from the provided machines. If no version is configured, the default
+// // Kubernetes version will be returned.
+// func GetKubernetesVersionFromMasterIn(machines []*clusterv1.Machine, bl []*existinginfrav1.ExistingInfraMachine) (string, string, error) {
+//  // Ensures all machines have the same version (either specified or empty):
+//  errs := Validate(machines, bl)
+//  if len(errs) > 0 {
+//      return "", "", errs.ToAggregate()
+//  }
+//  machine, _ := FirstMaster(machines, bl)
+//  version := capeimachine.GetKubernetesVersion(machine)
+//  ns := machine.ObjectMeta.Namespace
+//  if ns == "" {
+//      ns = manifest.DefaultNamespace
+//  }
+//  log.WithField("machine", machine.Name).WithField("version", version).WithField("namespace", ns).Debug("Kubernetes version used")
+//  return version, ns, nil
+// }
+
+// // ParseManifest parses the provided machines manifest file.
+// func ParseManifest(file string) (ml []*clusterv1.Machine, bl []*existinginfrav1.ExistingInfraMachine, err error) {
+//  f, err := os.Open(file)
+//  if err != nil {
+//      return nil, nil, err
+//  }
+//  ml, bl, err = Parse(f)
+//  if err != nil {
+//      err = errors.Wrapf(err, "parsing %q", file)
+//  }
+//  return
+// }
