@@ -1,15 +1,14 @@
 package ssh
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	sshutil "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/ssh"
+	"github.com/weaveworks/common/localcmd"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -93,53 +92,28 @@ func (c *Client) handleSessionIO(action func(*ssh.Session) error) (string, error
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get pipe to standard error")
 	}
-	var stdOutErr bytes.Buffer
-	outWriters := []io.Writer{&stdOutErr}
-	errWriters := []io.Writer{&stdOutErr}
-	if c.printOutputs {
-		outWriters = append(outWriters, os.Stdout)
-		errWriters = append(errWriters, os.Stderr)
-	}
-	stdOutWriter := io.MultiWriter(outWriters...)
-	stdErrWriter := io.MultiWriter(errWriters...)
 
 	err = action(session)
-
 	// Don't respond to err until output complete
-	var errStdOut, errStdErr error
-	syncChan := make(chan bool)
-	go func() {
-		_, errStdOut = io.Copy(stdOutWriter, stdOutPipe)
-		syncChan <- true
-	}()
-	go func() {
-		_, errStdErr = io.Copy(stdErrWriter, stdErrPipe)
-		syncChan <- true
-	}()
 
-	// Make sure copying is finished
-	<-syncChan
-	<-syncChan
+	stdOut, stdErr, outputErr := localcmd.ReadAllOutput(stdOutPipe, stdErrPipe)
 
 	// Now we can return the error
 	if err != nil {
-		return stdOutErr.String(), errors.Wrap(err, "failed while remote executing")
+		return stdOut + stdErr, errors.Wrap(err, "failed while remote executing")
 	}
 
 	if err := session.Wait(); err != nil {
 		if err, ok := err.(*ssh.ExitError); ok {
-			return stdOutErr.String(), &plan.RunError{ExitCode: err.ExitStatus()}
+			return stdOut + stdErr, &plan.RunError{ExitCode: err.ExitStatus()}
 		}
-		return stdOutErr.String(), errors.Wrap(err, "failed while waiting for end of remote execution")
+		return stdOut + stdErr, errors.Wrap(err, "failed while waiting for end of remote execution")
 	}
 
-	if errStdOut != nil {
-		return stdOutErr.String(), errors.Wrap(errStdOut, "failed while capturing stdout")
+	if outputErr != nil {
+		return stdOut + stdErr, errors.Wrap(outputErr, "reading from ssh command")
 	}
-	if errStdErr != nil {
-		return stdOutErr.String(), errors.Wrap(errStdErr, "failed while capturing stderr")
-	}
-	return stdOutErr.String(), nil
+	return stdOut + stdErr, outputErr
 }
 
 // Close closes this high-level Client's underlying SSH connection.

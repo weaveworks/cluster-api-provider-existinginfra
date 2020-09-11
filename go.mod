@@ -13,6 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.4.0
+	github.com/weaveworks/common v0.0.0-20200904101909-7508d7abccf3
 	github.com/weaveworks/libgitops v0.0.2
 	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
 	gopkg.in/oleiade/reflections.v1 v1.0.0
