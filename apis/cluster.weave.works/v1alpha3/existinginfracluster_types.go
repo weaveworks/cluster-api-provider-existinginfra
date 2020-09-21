@@ -30,6 +30,7 @@ type ClusterSpec struct {
 	// to provide runtime.Object compliance for conversion.
 	metav1.TypeMeta `json:"-"`
 
+<<<<<<< HEAD
 	User                     string `json:"user"`
 	KubernetesVersion        string `json:"kubernetesVersion,omitempty"`
 	ControllerImage          string `json:"controllerImage,omitempty"`
@@ -39,6 +40,12 @@ type ClusterSpec struct {
 	HTTPProxy                string `json:"httpProxy,omitempty"`
 
 	WorkloadCluster bool `json:"workloadCluster,omitempty"`
+=======
+	User                 string `json:"user"`
+	Version              string `json:"kubernetesVersion,omitempty"`
+	DeprecatedSSHKeyPath string `json:"sshKeyPath,omitempty"`
+	HTTPProxy            string `json:"httpProxy,omitempty"`
+>>>>>>> 562a4a5... bring in code needed for setting up repo configs and other things that were stored in the filesystem
 
 	Authentication *AuthenticationWebhook `json:"authenticationWebhook,omitempty"`
 	Authorization  *AuthorizationWebhook  `json:"authorizationWebhook,omitempty"`
