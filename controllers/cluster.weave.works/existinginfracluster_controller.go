@@ -69,8 +69,15 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 
 	if _, found := eic.Annotations[LocalController]; !found {
 		if _, found = eic.Annotations[Creating]; !found {
-			r.setClusterAnnotation(ctx, eic, Creating, "true")
-			setupInitialWorkloadCluster(eic)
+			if err := r.setClusterAnnotation(ctx, eic, Creating, "true"); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.setupGitDir(eic); err != nil {
+				return ctrl.Result{}, err
+			}
+			if err := r.setupInitialWorkloadCluster(eic); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
@@ -115,6 +122,16 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	eic.Status.Ready = true // TODO: know whether it is really ready
 
 	return ctrl.Result{}, nil
+}
+
+func (r *ExistingInfraClusterReconciler) setupGitDir(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
+	// XXX
+	return nil
+}
+
+func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
+	// XXX
+	return nil
 }
 
 func (r *ExistingInfraClusterReconciler) newBuilderWithMgr(mgr ctrl.Manager) *builder.Builder {

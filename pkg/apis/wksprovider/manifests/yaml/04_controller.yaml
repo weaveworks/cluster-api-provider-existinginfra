@@ -52,3 +52,11 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
+        volumeMounts:
+        - name: ipPool
+          mountPath: /var/ipPool
+          readOnly: true
+      volumes:
+      - name: ipPool
+        configMap:
+          name: ipPool
