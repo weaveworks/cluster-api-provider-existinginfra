@@ -143,6 +143,8 @@ spec:
                             type: string
                           key:
                             type: string
+                          contents:
+                            type: string
                         required:
                         - configmap
                         - key

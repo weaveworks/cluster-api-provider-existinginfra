@@ -30,10 +30,13 @@ type ClusterSpec struct {
 	// to provide runtime.Object compliance for conversion.
 	metav1.TypeMeta `json:"-"`
 
-	User                 string `json:"user"`
-	Version              string `json:"kubernetesVersion,omitempty"`
-	DeprecatedSSHKeyPath string `json:"sshKeyPath,omitempty"`
-	HTTPProxy            string `json:"httpProxy,omitempty"`
+	User                     string `json:"user"`
+	KubernetesVersion        string `json:"kubernetesVersion,omitempty"`
+	ControllerImage          string `json:"controllerImage,omitempty"`
+	ControlPlaneMachineCount uint16 `json:"controlPlaneMachineCount,omitempty"`
+	WorkerMachineCount       uint16 `json:"workerMachineCount,omitempty"`
+	DeprecatedSSHKeyPath     string `json:"sshKeyPath,omitempty"`
+	HTTPProxy                string `json:"httpProxy,omitempty"`
 
 	Authentication *AuthenticationWebhook `json:"authenticationWebhook,omitempty"`
 	Authorization  *AuthorizationWebhook  `json:"authorizationWebhook,omitempty"`

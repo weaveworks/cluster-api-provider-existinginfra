@@ -18,7 +18,6 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	capeimanifest "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
-	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/ssh"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	"github.com/weaveworks/libgitops/pkg/serializer"
 	corev1 "k8s.io/api/core/v1"
@@ -48,9 +47,9 @@ type KubeadmInit struct {
 	KubeadmInitScriptPath string `structs:"kubeadmInitScriptPath"`
 	// IgnorePreflightErrors is optionally used to skip kubeadm's preflight checks.
 	IgnorePreflightErrors []string `structs:"ignorePreflightErrors"`
-	// SSHKeyPath is the path to the private SSH key used by WKS to SSH into
+	// SSHKey is the private SSH key used by WKS to SSH into
 	// nodes to add/remove them to/from the Kubernetes cluster.
-	SSHKeyPath string `structs:"sshKeyPath"`
+	SSHKey string `structs:"-" plan:"hide"`
 	// BootstrapToken is the token used by kubeadm init and kubeadm join to
 	// safely form new clusters.
 	BootstrapToken *kubeadmapi.BootstrapTokenString `structs:"bootstrapToken"`
@@ -90,10 +89,6 @@ func (ki *KubeadmInit) State() plan.State {
 func (ki *KubeadmInit) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
 	log.Debug("Initializing Kubernetes cluster")
 
-	sshKey, err := ssh.ReadPrivateKey(ki.SSHKeyPath)
-	if err != nil {
-		return false, err
-	}
 	namespace := ki.Namespace.String()
 	if namespace == "" {
 		namespace = manifest.DefaultNamespace
@@ -179,7 +174,7 @@ func (ki *KubeadmInit) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
 	if err := ki.kubectlApply("02_rbac.yaml", namespace, runner); err != nil {
 		return false, err
 	}
-	return true, ki.applySecretWith(sshKey, caCertHash, certKey, namespace, runner)
+	return true, ki.applySecretWith([]byte(ki.SSHKey), caCertHash, certKey, namespace, runner)
 }
 
 func (ki *KubeadmInit) updateManifestNamespace(fileName, namespace string) ([]byte, error) {

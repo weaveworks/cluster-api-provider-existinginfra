@@ -547,14 +547,549 @@ status:
   storedVersions: []
 ---
 
-apiVersion: v1
-kind: ConfigMap
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
 metadata:
-  name: ipPool
-  namespace: ${NAMESPACE}
-data:
-  ips: |
-    ${EXISTING_INFRA_IPS}
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.3.0
+  creationTimestamp: null
+  name: existinginframachines.cluster.weave.works
+  labels:
+    cluster.x-k8s.io/v1alpha3: v1alpha3
+spec:
+  group: cluster.weave.works
+  names:
+    kind: ExistingInfraMachine
+    listKind: ExistingInfraMachineList
+    plural: existinginframachines
+    singular: existinginframachine
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            private:
+              description: EndPoint groups the details required to establish a connection.
+              properties:
+                address:
+                  type: string
+                port:
+                  type: integer
+              required:
+              - address
+              - port
+              type: object
+            providerID:
+              type: string
+            public:
+              description: EndPoint groups the details required to establish a connection.
+              properties:
+                address:
+                  type: string
+                port:
+                  type: integer
+              required:
+              - address
+              - port
+              type: object
+          type: object
+        status:
+          properties:
+            ready:
+              type: boolean
+          required:
+          - ready
+          type: object
+      type: object
+  version: v1alpha3
+  versions:
+  - name: v1alpha3
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.3.0
+  creationTimestamp: null
+  name: existinginfraclusters.cluster.weave.works
+  labels:
+    cluster.x-k8s.io/v1alpha3: v1alpha3
+spec:
+  group: cluster.weave.works
+  names:
+    kind: ExistingInfraCluster
+    listKind: ExistingInfraClusterList
+    plural: existinginfraclusters
+    singular: existinginfracluster
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            addons:
+              items:
+                description: Addon describes an addon to install on the cluster.
+                properties:
+                  deps:
+                    items:
+                      type: string
+                    type: array
+                  name:
+                    type: string
+                  params:
+                    additionalProperties:
+                      type: string
+                    type: object
+                required:
+                - name
+                type: object
+              type: array
+            apiServer:
+              properties:
+                additionalSANs:
+                  items:
+                    type: string
+                  type: array
+                extraArguments:
+                  items:
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                    required:
+                    - name
+                    - value
+                    type: object
+                  type: array
+              type: object
+            authenticationWebhook:
+              properties:
+                cacheTTL:
+                  type: string
+                secretFile:
+                  type: string
+                url:
+                  type: string
+              required:
+              - secretFile
+              - url
+              type: object
+            authorizationWebhook:
+              properties:
+                cacheAuthorizedTTL:
+                  type: string
+                cacheUnauthorizedTTL:
+                  type: string
+                secretFile:
+                  type: string
+                url:
+                  type: string
+              required:
+              - secretFile
+              - url
+              type: object
+            cloudProvider:
+              type: string
+            controlPlaneEndpoint:
+              type: string
+            cri:
+              properties:
+                kind:
+                  type: string
+                package:
+                  type: string
+                version:
+                  type: string
+              required:
+              - kind
+              - package
+              - version
+              type: object
+            httpProxy:
+              type: string
+            imageRepository:
+              type: string
+            kubeletArguments:
+              items:
+                properties:
+                  name:
+                    type: string
+                  value:
+                    type: string
+                required:
+                - name
+                - value
+                type: object
+              type: array
+            kubernetesVersion:
+              type: string
+            controlPlaneMachineCount:
+              format: int32
+              type: integer
+            workerMachineCount:
+              format: int32
+              type: integer
+            os:
+              properties:
+                files:
+                  items:
+                    properties:
+                      destination:
+                        type: string
+                      source:
+                        properties:
+                          configmap:
+                            type: string
+                          key:
+                            type: string
+                          contents:
+                            type: string
+                        required:
+                        - configmap
+                        - key
+                        - contents
+                        type: object
+                    required:
+                    - destination
+                    - source
+                    type: object
+                  type: array
+              type: object
+            sshKeyPath:
+              type: string
+            user:
+              type: string
+          required:
+          - cri
+          - user
+          type: object
+        status:
+          properties:
+            ready:
+              type: boolean
+          required:
+          - ready
+          type: object
+      type: object
+  version: v1alpha3
+  versions:
+  - name: v1alpha3
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: wks-controller-role
+rules:
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - clusters
+  - machines
+  - machines/status
+  - machinedeployments
+  - machinesets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cluster.weave.works
+  resources:
+  - existinginfraclusters
+  - existinginfraclusters/status
+  - existinginframachines
+  - existinginframachines/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  # pods/eviction is required for the WKS controller to be able to evict pods
+  # upon machine deletions.
+  - pods/eviction
+  - pods
+  - nodes
+  - events
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - update
+# The below is required for the WKS controller to be able to delete daemonsets
+# upon machine deletions.
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - get
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wks-controller-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wks-controller-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - bootstrap.cluster.x-k8s.io
+  - controlplane.cluster.x-k8s.io
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - bootstrap.cluster.x-k8s.io
+  - exp.infrastructure.cluster.x-k8s.io
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - bootstrap.cluster.x-k8s.io
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - clusters
+  - clusters/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - machinedeployments
+  - machinedeployments/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - machinehealthchecks
+  - machinehealthchecks/status
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - machines
+  - machines/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - machinesets
+  - machinesets/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - exp.cluster.x-k8s.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - exp.cluster.x-k8s.io
+  resources:
+  - machinepools
+  - machinepools/status
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: system
 ---
 
 apiVersion: apps/v1
@@ -600,8 +1135,10 @@ spec:
         operator: Exists
       containers:
       - name: controller
-        image: ${EXISTINGINFRA_CONTROLLER:-"jrryjcksn/cluster-api-existinginfra-controller:controller-test"}
-
+        image: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"jrryjcksn/cluster-api-existinginfra-controller:controller-test"}
+        env:
+        - name: EXISTINGINFRA_CONTROLLER_IMAGE
+          value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"jrryjcksn/cluster-api-existinginfra-controller:controller-test"}
         args:
         - --verbose
         resources:
@@ -611,11 +1148,5 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
-        volumeMounts:
-        - name: ipPool
-          mountPath: /var/ipPool
-          readOnly: true
-      volumes:
-      - name: ipPool
-        configMap:
-          name: ipPool
+
+

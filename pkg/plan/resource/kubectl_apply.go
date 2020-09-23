@@ -113,6 +113,7 @@ func (ka *KubectlApply) Apply(runner plan.Runner, diff plan.Diff) (bool, error) 
 		return false, err
 	}
 
+	log.Infof("KA CONTENT TO APPLY: %s", c)
 	if str(ka.Namespace) != "" {
 		content, err := manifest.WithNamespace(serializer.FromBytes(c), str(ka.Namespace))
 		if err != nil {
@@ -122,6 +123,8 @@ func (ka *KubectlApply) Apply(runner plan.Runner, diff plan.Diff) (bool, error) 
 			c = content
 		}
 	}
+
+	log.Infof("POST-PROCESSED KA CONTENT TO APPLY: %s", c)
 
 	if err := RunKubectlApply(runner, KubectlApplyArgs{
 		Content:       c,
