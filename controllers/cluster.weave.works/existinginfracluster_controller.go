@@ -17,29 +17,44 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	gerrors "github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	clusterweaveworksv1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/config"
+	capeios "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/os"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/ssh"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/specs"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
+	"github.com/weaveworks/libgitops/pkg/serializer"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/yaml"
 )
 
 const (
 	LocalController = "wks.weave.works/local-controller"
-	Creating        = "wks.weave.works/is-creating"
+	Created         = "wks.weave.works/is-created"
+	PoolSecretName  = "ip-pool"
 )
 
 // ExistingInfraClusterReconciler reconciles a ExistingInfraCluster object
@@ -48,6 +63,14 @@ type ExistingInfraClusterReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	eventRecorder record.EventRecorder
+}
+
+type MachineInfo struct {
+	SSHKey      string `json:"sshKey"`
+	PublicIP    string `json:"publicIP"`
+	PublicPort  string `json:"publicPort"`
+	PrivateIP   string `json:"privateIP"`
+	PrivatePort string `json:"privatePort"`
 }
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginfraclusters,verbs=get;list;watch;create;update;patch;delete
@@ -67,15 +90,17 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
+	log.Infof("Annotations: %v", eic.Annotations)
 	if _, found := eic.Annotations[LocalController]; !found {
-		if _, found = eic.Annotations[Creating]; !found {
-			if err := r.setClusterAnnotation(ctx, eic, Creating, "true"); err != nil {
+		if _, found = eic.Annotations[Created]; !found {
+			contextLog.Info("About to set up new cluster")
+			if err := r.setupInitialWorkloadCluster(ctx, eic); err != nil {
+				contextLog.Infof("Failed to set up new cluster: %v", err)
 				return ctrl.Result{}, err
 			}
-			if err := r.setupGitDir(eic); err != nil {
-				return ctrl.Result{}, err
-			}
-			if err := r.setupInitialWorkloadCluster(eic); err != nil {
+			contextLog.Info("Finished setting up new cluster")
+			if err := r.setEICAnnotation(ctx, eic, Created, "true"); err != nil {
+				log.Infof("Error setting annotation: %v", err)
 				return ctrl.Result{}, err
 			}
 		}
@@ -124,14 +149,42 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	return ctrl.Result{}, nil
 }
 
-func (r *ExistingInfraClusterReconciler) setupGitDir(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
-	// XXX
-	return nil
-}
+func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
+	var finalError error
+	controlPlaneCount := eic.Spec.ControlPlaneMachineCount
+	workerCount := eic.Spec.WorkerMachineCount
+	totalMachineCount := controlPlaneCount + workerCount
+	machineInfo, err := r.allocate(ctx, int(totalMachineCount), eic.Namespace)
+	if err != nil {
+		return err
+	}
+	// Return all allocated IPs if we encounter an error
+	defer func() {
+		if val := recover(); val != nil {
+			log.Infof("Panic value: %v", val)
+			finalError = errors.New("Panic occurred!")
+			r.deallocate(ctx, machineInfo, eic.Namespace)
+		}
+	}()
 
-func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
-	// XXX
-	return nil
+	cluster, err := r.getCluster(ctx, eic)
+	if err != nil {
+		return err
+	}
+	if err := r.setEICAnnotation(ctx, eic, LocalController, "true"); err != nil {
+		return err
+	}
+	machines, eims, err := r.createMachines(machineInfo, int(controlPlaneCount), eic.Spec.KubernetesVersion, eic.Namespace, eic.Name)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("Created machines: %v, %v", machines, eims)
+	initError := r.initiateCluster(cluster, eic, machines, eims, machineInfo)
+	if initError != nil && finalError == nil { // no panic
+		r.deallocate(ctx, machineInfo, eic.Namespace)
+	}
+	return finalError
 }
 
 func (r *ExistingInfraClusterReconciler) newBuilderWithMgr(mgr ctrl.Manager) *builder.Builder {
@@ -148,9 +201,9 @@ func (r *ExistingInfraClusterReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 	return r.newBuilderWithMgr(mgr).WithOptions(options).Complete(r)
 }
 
-func (a *ExistingInfraClusterReconciler) setClusterAnnotation(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, key, value string) error {
-	err := a.modifyCluster(ctx, eic, func(node *clusterweaveworksv1alpha3.ExistingInfraCluster) {
-		eic.Annotations[key] = value
+func (a *ExistingInfraClusterReconciler) setEICAnnotation(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, key, value string) error {
+	err := a.modifyCluster(ctx, eic, func(cluster *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+		cluster.Annotations[key] = value
 	})
 	if err != nil {
 		return gerrors.Wrapf(err, "Failed to set annotation: %s for cluster: %s", key, eic.Name)
@@ -162,7 +215,7 @@ func (a *ExistingInfraClusterReconciler) modifyCluster(ctx context.Context, eic 
 	contextLog := log.WithFields(log.Fields{"cluster": eic.Name})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result clusterweaveworksv1alpha3.ExistingInfraCluster
-		getErr := a.Client.Get(ctx, client.ObjectKey{Name: eic.Name}, &result)
+		getErr := a.Client.Get(ctx, client.ObjectKey{Name: eic.Name, Namespace: eic.Namespace}, &result)
 		if getErr != nil {
 			contextLog.Errorf("failed to read cluster info, assuming unsafe to update: %v", getErr)
 			return getErr
@@ -194,6 +247,306 @@ func (r *ExistingInfraClusterReconciler) recordEvent(object runtime.Object, even
 	}
 }
 
-func setupInitialWorkloadCluster(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+func (r *ExistingInfraClusterReconciler) initiateCluster(
+	cluster *clusterv1.Cluster,
+	eic *clusterweaveworksv1alpha3.ExistingInfraCluster,
+	machines []*clusterv1.Machine,
+	eims []*clusterweaveworksv1alpha3.ExistingInfraMachine,
+	machineInfo []*MachineInfo) error {
+	sp := specs.New(cluster, eic, machines, eims)
+	log.Infof("INFO: %v", *machineInfo[0])
 
+	sshKey, err := getSSHKey(machineInfo[0])
+	if err != nil {
+		return err
+	}
+	sshClient, err := ssh.NewClient(ssh.ClientParams{
+		User:         sp.ClusterSpec.User,
+		PrivateKey:   sshKey,
+		Host:         sp.GetMasterPublicAddress(),
+		Port:         sp.MasterSpec.Public.Port,
+		PrintOutputs: log.GetLevel() > log.InfoLevel})
+	if err != nil {
+		return gerrors.Wrap(err, "failed to create SSH client")
+	}
+	defer sshClient.Close()
+	log.Infof("Connected to %s via ssh", sp.GetMasterPublicAddress())
+	installer, err := capeios.Identify(sshClient)
+	if err != nil {
+		return gerrors.Wrapf(err, "failed to identify operating system for seed node (%s)", sp.GetMasterPublicAddress())
+	}
+	log.Infof("Identified operating system")
+
+	// N.B.: we generate this bootstrap token where wksctl apply is run hoping
+	// that this will be on a machine which has been running for a while, and
+	// therefore will generate a "more random" token, than we would on a
+	// potentially newly created VM which doesn't have much entropy yet.
+	token, err := kubeadm.GenerateBootstrapToken()
+	if err != nil {
+		return gerrors.Wrap(err, "failed to generate bootstrap token")
+	}
+
+	ns := eic.Namespace
+
+	clusterManifest, err := marshal(cluster, eic)
+	if err != nil {
+		return gerrors.Wrap(err, "failed to marshal cluster manifests")
+	}
+	machinesManifest, err := marshal(machines, eims)
+	if err != nil {
+		return gerrors.Wrap(err, "failed to marshal machine manifests")
+	}
+
+	log.Infof("Cluster manifest: %s, Machines manifest: %s", clusterManifest, machinesManifest)
+
+	log.Infof("About to set up seed node: %s", sp.GetMasterPublicAddress())
+	if err := capeios.SetupSeedNode(installer, capeios.SeedNodeParams{
+		PublicIP:             sp.GetMasterPublicAddress(),
+		PrivateIP:            sp.GetMasterPrivateAddress(),
+		ServicesCIDRBlocks:   sp.Cluster.Spec.ClusterNetwork.Services.CIDRBlocks,
+		PodsCIDRBlocks:       sp.Cluster.Spec.ClusterNetwork.Pods.CIDRBlocks,
+		ExistingInfraCluster: *eic,
+		ClusterManifest:      clusterManifest,
+		MachinesManifest:     machinesManifest,
+		SSHKey:               string(sshKey),
+		BootstrapToken:       token,
+		KubeletConfig: config.KubeletConfig{
+			NodeIP:         sp.GetMasterPrivateAddress(),
+			CloudProvider:  sp.GetCloudProvider(),
+			ExtraArguments: sp.GetKubeletArguments(),
+		},
+		Controller: capeios.ControllerParams{
+			ImageOverride: os.Getenv("EXISTINGINFRA_CONTROLLER_IMAGE"),
+		},
+		ImageRepository:      sp.ClusterSpec.ImageRepository,
+		ControlPlaneEndpoint: sp.ClusterSpec.ControlPlaneEndpoint,
+		AdditionalSANs:       sp.ClusterSpec.APIServer.AdditionalSANs,
+		Namespace:            ns,
+		AddonNamespaces:      map[string]string{},
+	}); err != nil {
+		return gerrors.Wrapf(err, "failed to set up seed node (%s)", sp.GetMasterPublicAddress())
+	}
+
+	log.Infof("Finished setting up seed node: %s", sp.GetMasterPublicAddress())
+	return nil
+}
+
+func getSSHKey(info *MachineInfo) ([]byte, error) {
+	decoded, err := base64.StdEncoding.DecodeString(info.SSHKey)
+	if err != nil {
+		return nil, err
+	}
+	return decoded, nil
+}
+
+func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachines int, ns string) ([]*MachineInfo, error) {
+	log.Infof("Starting allocation of %d machines", numMachines)
+	var secret corev1.Secret
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: PoolSecretName}, &secret); err != nil {
+		return nil, err
+	}
+	log.Info("Got secret")
+	jsonData := []byte(secret.Data["config"])
+	var info []MachineInfo
+	if err := json.Unmarshal(jsonData, &info); err != nil {
+		return nil, err
+	}
+	log.Info("Unmarshaled secret")
+
+	if len(info) < numMachines {
+		return nil, fmt.Errorf("Insufficient machines to create cluster; required: %d, available: %d", numMachines, len(info))
+	}
+	log.Info("Sufficient machines are present")
+	resultMachines := []*MachineInfo{}
+	for _, m := range info[:numMachines] {
+		mref := m
+		resultMachines = append(resultMachines, &mref)
+	}
+
+	info = info[numMachines:]
+	infoBytes, err := json.Marshal(info)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Updating secret")
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var result corev1.Secret
+		getErr := r.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: PoolSecretName}, &result)
+		if getErr != nil {
+			log.Errorf("failed to read secret, can't reschedule: %v", getErr)
+			return getErr
+		}
+		result.Data["config"] = infoBytes
+		updateErr := r.Client.Update(ctx, &result)
+		if updateErr != nil {
+			log.Errorf("failed to reschedule secret: %v", updateErr)
+			return updateErr
+		}
+		return nil
+	})
+	if retryErr != nil {
+		log.Errorf("failed to reschedule secret: %v", retryErr)
+		return nil, retryErr
+	}
+
+	log.Info("Successfully updated secret")
+	return resultMachines, nil
+}
+
+func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machines []*MachineInfo, ns string) error {
+	log.Infof("Starting deallocation of %d machines", len(machines))
+	var secret corev1.Secret
+	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: PoolSecretName}, &secret); err != nil {
+		return err
+	}
+	log.Info("Got secret for deallocation")
+	jsonData := []byte(secret.Data["config"])
+	var info []MachineInfo
+	if err := json.Unmarshal(jsonData, &info); err != nil {
+		return err
+	}
+	log.Info("Unmarshaled secret")
+
+	for _, m := range machines {
+		info = append(info, *m)
+	}
+	infoBytes, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	log.Info("Updating secret")
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var result corev1.Secret
+		getErr := r.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: PoolSecretName}, &result)
+		if getErr != nil {
+			log.Errorf("failed to read secret, can't reschedule: %v", getErr)
+			return getErr
+		}
+		result.Data["config"] = infoBytes
+		updateErr := r.Client.Update(ctx, &result)
+		if updateErr != nil {
+			log.Errorf("failed to reschedule secret: %v", updateErr)
+			return updateErr
+		}
+		return nil
+	})
+	if retryErr != nil {
+		log.Errorf("failed to reschedule secret: %v", retryErr)
+		return retryErr
+	}
+
+	log.Info("Successfully updated secret")
+	return nil
+}
+
+func (r *ExistingInfraClusterReconciler) getCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) (*clusterv1.Cluster, error) {
+	var cluster clusterv1.Cluster
+	err := r.Client.Get(ctx, client.ObjectKey{Namespace: eic.Namespace, Name: eic.Name}, &cluster)
+	if err != nil {
+		return nil, err
+	}
+	cleanJson := cluster.Annotations["kubectl.kubernetes.io/last-applied-configuration"]
+	if err := json.Unmarshal([]byte(cleanJson), &cluster); err != nil {
+		return nil, err
+	}
+	return &cluster, nil
+}
+
+func (r *ExistingInfraClusterReconciler) createMachines(minfo []*MachineInfo, controlPlaneCount int, k8sVersion, namespace, name string) ([]*clusterv1.Machine, []*clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
+	machines := []*clusterv1.Machine{}
+	eims := []*clusterweaveworksv1alpha3.ExistingInfraMachine{}
+
+	for idx, info := range minfo {
+		machine, eim, err := createMachine(info, idx, idx < controlPlaneCount, k8sVersion, namespace, name)
+		if err != nil {
+			log.Infof("Got err: %v creating: %v", err, info)
+			return nil, nil, err
+		}
+		machines = append(machines, machine)
+		eims = append(eims, eim)
+	}
+
+	return machines, eims, nil
+}
+
+func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion, ns, name string) (*clusterv1.Machine, *clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
+	var machine clusterv1.Machine
+	var eim clusterweaveworksv1alpha3.ExistingInfraMachine
+
+	log.Infof("Creating machine: %v", *minfo)
+	baseName := "worker"
+	if isControlPlane {
+		baseName = "master"
+	}
+	log.Infof("Set base name: %s", baseName)
+	machine.Labels = map[string]string{}
+	machine.Labels["set"] = baseName
+	log.Infof("Set label to: %s", baseName)
+	machineName := fmt.Sprintf("%s-%s-%d", name, baseName, idx)
+
+	log.Infof("Machine name: %s", machineName)
+	machine.Namespace = ns
+	machine.Name = machineName
+	machine.Spec.Version = &k8sVersion
+	machine.Spec.InfrastructureRef.Kind = "ExistingInfraMachine"
+	machine.Spec.InfrastructureRef.Name = machineName
+	machine.Spec.InfrastructureRef.Namespace = ns
+	machine.Spec.InfrastructureRef.APIVersion = "cluster.weave.works/v1alpha3"
+
+	log.Infof("Machine: %v", machine)
+
+	log.Infof("Creating existinginfra machine for: %v", *minfo)
+
+	eim.Namespace = ns
+	eim.Name = machineName
+
+	publicEndpoint := &eim.Spec.Public
+	//	publicAddress, err := toUint16(minfo.PublicIP)
+	publicAddress := minfo.PublicIP
+	publicEndpoint.Address = publicAddress
+	publicPort, err := toUint16(minfo.PublicPort)
+	if err != nil {
+		return nil, nil, err
+	}
+	publicEndpoint.Port = publicPort
+
+	log.Infof("Finished public address for: %v", *minfo)
+
+	privateEndpoint := &eim.Spec.Private
+	privateAddress := minfo.PrivateIP
+	privateEndpoint.Address = privateAddress
+	privatePort, err := toUint16(minfo.PrivatePort)
+	if err != nil {
+		return nil, nil, err
+	}
+	privateEndpoint.Port = privatePort
+
+	log.Infof("Finished private address for: %v", *minfo)
+
+	return &machine, &eim, nil
+}
+
+func toUint16(num string) (uint16, error) {
+	val, err := strconv.Atoi(num)
+	if err != nil {
+		return 0, err
+	}
+	return uint16(val), nil
+}
+
+func marshal(objs ...interface{}) (string, error) {
+	var buf bytes.Buffer
+	fw := serializer.NewYAMLFrameWriter(&buf)
+	data := [][]byte{}
+	for _, obj := range objs {
+		value, err := yaml.Marshal(obj)
+		if err != nil {
+			return "", err
+		}
+		data = append(data, value)
+	}
+	if err := serializer.WriteFrameList(fw, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

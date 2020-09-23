@@ -3,8 +3,8 @@ package os
 import (
 	// "bytes"
 	// "crypto/rsa"
-	// "encoding/base64"
-	"encoding/json"
+	//	"encoding/base64"
+	//	"encoding/json"
 	"fmt"
 	//	"io"
 	//	"io/ioutil"
@@ -61,40 +61,6 @@ var (
 	pemKeys = []string{"certificate-authority", "client-certificate", "client-key"}
 )
 
-type crdFile struct {
-	fname string
-	data  []byte
-}
-
-// // Retrieve all CRD definitions needed for cluster API
-// func getCRDs() ([]crdFile, error) {
-//  crddir, err := crds.CRDs.Open(".")
-//  if err != nil {
-//      return nil, errors.Wrap(err, "failed to list cluster API CRDs")
-//  }
-//  crdFiles := make([]crdFile, 0)
-//  for {
-//      entry, err := crddir.Readdir(1)
-//      if err != nil && err != io.EOF {
-//          return nil, errors.Wrap(err, "failed to open cluster API CRD directory")
-//      }
-//      if entry == nil {
-//          break
-//      }
-//      fname := entry[0].Name()
-//      crd, err := crds.CRDs.Open(fname)
-//      if err != nil {
-//          return nil, errors.Wrap(err, "failed to open cluster API CRD")
-//      }
-//      data, err := ioutil.ReadAll(crd)
-//      if err != nil {
-//          return nil, errors.Wrap(err, "failed to read cluster API CRD")
-//      }
-//      crdFiles = append(crdFiles, crdFile{fname, data})
-//  }
-//  return crdFiles, nil
-// }
-
 // GitParams are all SeedNodeParams related to the user's Git(Hub) repo
 type GitParams struct {
 	GitURL           string
@@ -114,44 +80,16 @@ type ControllerParams struct {
 	ImageBuiltin string
 }
 
-// // Retrieve all CRD definitions needed for cluster API
-// func getCRDs() ([]crdFile, error) {
-//  crddir, err := crds.CRDs.Open(".")
-//  if err != nil {
-//      return nil, errors.Wrap(err, "failed to list cluster API CRDs")
-//  }
-//  crdFiles := make([]crdFile, 0)
-//  for {
-//      entry, err := crddir.Readdir(1)
-//      if err != nil && err != io.EOF {
-//          return nil, errors.Wrap(err, "failed to open cluster API CRD directory")
-//      }
-//      if entry == nil {
-//          break
-//      }
-//      fname := entry[0].Name()
-//      crd, err := crds.CRDs.Open(fname)
-//      if err != nil {
-//          return nil, errors.Wrap(err, "failed to open cluster API CRD")
-//      }
-//      data, err := ioutil.ReadAll(crd)
-//      if err != nil {
-//          return nil, errors.Wrap(err, "failed to read cluster API CRD")
-//      }
-//      crdFiles = append(crdFiles, crdFile{fname, data})
-//  }
-//  return crdFiles, nil
-// }
-
 // SeedNodeParams groups required inputs to configure a "seed" Kubernetes node.
 type SeedNodeParams struct {
-	PublicIP           string
-	PrivateIP          string
-	ServicesCIDRBlocks []string
-	PodsCIDRBlocks     []string
-	ClusterManifest    string
-	MachinesManifest   string
-	SSHKeyPath         string
+	PublicIP             string
+	PrivateIP            string
+	ServicesCIDRBlocks   []string
+	PodsCIDRBlocks       []string
+	ExistingInfraCluster existinginfrav1.ExistingInfraCluster
+	ClusterManifest      string
+	MachinesManifest     string
+	SSHKey               string
 	// BootstrapToken is the token used by kubeadm init and kubeadm join
 	// to safely form new clusters.
 	BootstrapToken       *kubeadmapi.BootstrapTokenString
@@ -207,20 +145,20 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}
+	log.Info("Validated params")
 	cfg, err := envcfg.GetEnvSpecificConfig(o.PkgType, params.Namespace, params.KubeletConfig.CloudProvider, o.Runner)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("Got environment config")
+
+	// Get cluster
+	cluster := params.ExistingInfraCluster
+	log.Infof("Got cluster: %v", cluster)
+
 	//	kubernetesVersion, kubernetesNamespace, err := machine.GetKubernetesVersionFromManifest(params.MachinesManifest)
-	kubernetesVersion, err := getKubernetesVersion(params.ClusterManifest)
-	if err != nil {
-		return nil, err
-	}
-	// Get cluster from system
-	cluster, err := getCluster() // XXX
-	if err != nil {
-		return nil, err
-	}
+	kubernetesVersion := getKubernetesVersion(&cluster)
+	log.Info("Got Kubernetes version")
 
 	b := plan.NewBuilder()
 
@@ -233,19 +171,22 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 		return nil, err
 	}
 
+	log.Info("Extracted config maps")
+
 	configRes := recipe.BuildConfigPlan(configFileResources)
 	b.AddResource("install:config", configRes, plan.DependOn("install:base"))
 
-	// pemSecretResources, authConfigMap, authConfigManifest, err := processPemFilesIfAny(b, &cluster.Spec, params.ConfigDirectory, params.Namespace, params.SealedSecretKeyPath, params.SealedSecretCertPath)
-	// if err != nil {
-	//  return nil, err
-	// }
+	log.Info("Built config plan")
 
 	criRes := recipe.BuildCRIPlan(&cluster.Spec.CRI, cfg, o.PkgType)
 	b.AddResource("install:cri", criRes, plan.DependOn("install:config"))
 
+	log.Info("Built cri plan")
+
 	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
 	b.AddResource("install:k8s", k8sRes, plan.DependOn("install:cri"))
+
+	log.Info("Built k8s plan")
 
 	//	apiServerArgs := getAPIServerArgs(&cluster.Spec, pemSecretResources)
 
@@ -256,6 +197,8 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 		controlPlaneEndpoint = params.PrivateIP + ":6443"
 	}
 
+	log.Info("Got control plane endpoint")
+
 	kubeadmInitResource :=
 		&resource.KubeadmInit{
 			PublicIP:              params.PublicIP,
@@ -263,7 +206,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 			KubeletConfig:         &params.KubeletConfig,
 			ConntrackMax:          cfg.ConntrackMax,
 			UseIPTables:           cfg.UseIPTables,
-			SSHKeyPath:            params.SSHKeyPath,
+			SSHKey:                params.SSHKey,
 			BootstrapToken:        params.BootstrapToken,
 			ControlPlaneEndpoint:  controlPlaneEndpoint,
 			IgnorePreflightErrors: cfg.IgnorePreflightErrors,
@@ -281,69 +224,47 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 			PodCIDRBlock:     params.PodsCIDRBlocks[0],
 		}
 	b.AddResource("kubeadm:init", kubeadmInitResource, plan.DependOn("install:k8s"))
+
+	log.Info("Got init resource")
+
 	// TODO(damien): Add a CNI section in cluster.yaml once we support more than one CNI plugin.
 	const cni = "weave-net"
 
-	// cniAdddon := existinginfrav1.Addon{Name: cni}
-
-	// // we use the namespace defined in addon-namespace map to make weave-net run in kube-system
-	// // as weave-net requires to run in the kube-system namespace *only*.
-	// manifests, err := buildAddon(cniAdddon, params.ImageRepository, params.ClusterManifest, params.GetAddonNamespace(cni))
-	// if err != nil {
-	//  return nil, errors.Wrap(err, "failed to generate manifests for CNI plugin")
-	// }
-
-	// if len(params.PodsCIDRBlocks) > 0 && params.PodsCIDRBlocks[0] != "" {
-	//  // setting the pod CIDR block is currently only supported for the weave-net CNI
-	//  if cni == "weave-net" {
-	//      manifests, err = SetWeaveNetPodCIDRBlock(manifests, params.PodsCIDRBlocks[0])
-	//      if err != nil {
-	//          return nil, errors.Wrap(err, "failed to inject ipalloc_range")
-	//      }
-	//  }
-	// }
-
 	// cniRsc := recipe.BuildCNIPlan(cni, manifests)
+
+	var manifest string
+	fetchRsc := &resource.Run{Script: object.String("kubectl version | base64 | tr -d '\n'"), Output: &manifest}
+	b.AddResource("fetch:cni", fetchRsc, plan.DependOn("kubeadm:init"))
 	cniRsc := &resource.KubectlApply{
-		ManifestURL: object.String(fmt.Sprintf("https://cloud.weave.works/net?k8s-version=%s",
-			kubernetesVersion))}
-	b.AddResource("install:cni", cniRsc, plan.DependOn("kubeadm:init"))
+		ManifestURL: plan.ParamString("https://cloud.weave.works/k8s/net?k8s-version=%s", &manifest)}
+	b.AddResource("install:cni", cniRsc, plan.DependOn("fetch:cni"))
+	log.Info("Got cni resource")
 
 	kubectlApplyDeps := []string{"install:cni"}
-
-	// // If we're pulling data out of GitHub, we install sealed secrets and any auth secrets stored in sealed secrets
-	// configDeps, err := addSealedSecretResourcesIfNecessary(b, kubectlApplyDeps, pemSecretResources, sealedSecretVersion, params.SealedSecretKeyPath, params.SealedSecretCertPath, params.Namespace)
-	// if err != nil {
-	//  return nil, err
-	// }
 
 	// Set plan as an annotation on node, just like controller does
 	seedNodePlan, err := seedNodeSetupPlan(o, params, &cluster.Spec, configMaps, map[string]*secretResourceSpec{}, kubernetesVersion, params.Namespace)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("Got seed node plan")
+
 	b.AddResource("node:plan", &resource.KubectlAnnotateSingleNode{Key: recipe.PlanKey, Value: seedNodePlan.ToJSON()}, plan.DependOn("kubeadm:init"))
 
 	// Add config maps to system so controller can use them
 	configMapPlan := recipe.BuildConfigMapPlan(configMapManifests, params.Namespace)
+	log.Info("Got config map plan")
 
-	//	b.AddResource("install:configmaps", configMapPlan, plan.DependOn(configDeps[0], configDeps[1:]...))
 	b.AddResource("install:configmaps", configMapPlan, plan.DependOn("node:plan"))
 
 	applyClstrRsc := &resource.KubectlApply{Manifest: []byte(params.ClusterManifest), Namespace: object.String(params.Namespace)}
 
 	b.AddResource("kubectl:apply:cluster", applyClstrRsc, plan.DependOn("install:configmaps"))
 
-	// machinesManifest, err := machine.GetMachinesManifest(params.MachinesManifestPath)
-	// if err != nil {
-	//  return nil, err
-	// }
 	mManRsc := &resource.KubectlApply{Manifest: []byte(params.MachinesManifest), Filename: object.String("machinesmanifest"), Namespace: object.String(params.Namespace)}
 	b.AddResource("kubectl:apply:machines", mManRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
 
 	dep := "kubectl:apply:machines"
-	// dep := addSealedSecretWaitIfNecessary(b, params.SealedSecretKeyPath, params.SealedSecretCertPath)
-
 	{
 		capiCtlrManifest, err := capiControllerManifest(params.Controller, params.Namespace, params.ConfigDirectory)
 		if err != nil {
@@ -361,41 +282,8 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	ctlrRsc := &resource.KubectlApply{Manifest: wksCtlrManifest, Filename: object.String("wks_controller.yaml")}
 	b.AddResource("install:wks", ctlrRsc, plan.DependOn("kubectl:apply:cluster", dep))
 
-	// TODO move so this can also be performed when the user updates the cluster.  See issue https://github.com/weaveworks/wksctl/issues/440
-	// addons, err := parseAddons(params.ClusterManifestPath, params.Namespace, params.AddonNamespaces)
-	// if err != nil {
-	//  return nil, err
-	// }
-
-	// addonRsc := recipe.BuildAddonPlan(params.ClusterManifestPath, addons)
-	// b.AddResource("install:addons", addonRsc, plan.DependOn("kubectl:apply:cluster", "kubectl:apply:machines"))
 	return CreatePlan(b)
 }
-
-// BuildAddonPlan creates a plan containing all the addons from the cluster manifest
-// func BuildAddonPlan(clusterManifestPath string, addons map[string][][]byte) plan.Resource {
-//  b := plan.NewBuilder()
-//  for name, manifests := range addons {
-//      var previous *string
-//      for i, m := range manifests {
-//          resFile := fmt.Sprintf("%s-%02d", name, i)
-//          resName := "install:addon:" + resFile
-//          manRsc := &resource.KubectlApply{Manifest: m, Filename: object.String(resFile + ".yaml"), Namespace: object.String("addons")}
-
-//          if previous != nil {
-//              b.AddResource(resName, manRsc, plan.DependOn(*previous))
-//          } else {
-//              b.AddResource(resName, manRsc)
-//          }
-//          previous = &resName
-//      }
-//  }
-//  p, err := b.Plan()
-//  if err != nil {
-//      log.Fatalf("%v", err)
-//  }
-//  return &p
-// }
 
 func capiControllerManifest(controller ControllerParams, namespace, configDir string) ([]byte, error) {
 	return []byte(capiControllerManifestString), nil
@@ -403,50 +291,15 @@ func capiControllerManifest(controller ControllerParams, namespace, configDir st
 
 func wksControllerManifest(controller ControllerParams, namespace, configDir string) ([]byte, error) {
 	manifestbytes := []byte(wksControllerManifestString)
-	// content, err := manifest.WithNamespace(serializer.FromBytes(manifestbytes), namespace)
-	// if err != nil {
-	//  return nil, err
-	// }
-	// return updateControllerImage(content, controller.ImageOverride)
 	return manifestbytes, nil
 }
-
-// updateControllerImage replaces the controller image in the manifest and
-// returns the updated manifest
-// func updateControllerImage(manifest []byte, controllerImageOverride string) ([]byte, error) {
-//  if controllerImageOverride == "" {
-//      return manifest, nil
-//  }
-//  d := &v1beta2.Deployment{}
-//  if err := yaml.Unmarshal(manifest, d); err != nil {
-//      return nil, errors.Wrap(err, "failed to unmarshal WKS controller's manifest")
-//  }
-//  if d.Kind != deployment {
-//      return nil, fmt.Errorf("invalid kind for WKS controller's manifest: expected %q but got %q", deployment, d.Kind)
-//  }
-//  var updatedController bool
-//  for i := 0; i < len(d.Spec.Template.Spec.Containers); i++ {
-//      if d.Spec.Template.Spec.Containers[i].Name == "controller" {
-//          d.Spec.Template.Spec.Containers[i].Image = controllerImageOverride
-//          updatedController = true
-//      }
-//  }
-//  if !updatedController {
-//      return nil, errors.New("failed to update WKS controller's manifest: container not found")
-//  }
-//  return yaml.Marshal(d)
-// }
 
 func getCluster() (eic *existinginfrav1.ExistingInfraCluster, err error) {
 	return nil, nil
 }
 
-func getKubernetesVersion(clusterManifest string) (string, error) {
-	var cspec existinginfrav1.ClusterSpec
-	if err := json.Unmarshal([]byte(clusterManifest), &cspec); err != nil {
-		return "", err
-	}
-	return cspec.Version, nil
+func getKubernetesVersion(cluster *existinginfrav1.ExistingInfraCluster) string {
+	return cluster.Spec.KubernetesVersion
 }
 
 // Sets the pod CIDR block in the weave-net manifest
@@ -547,89 +400,41 @@ func findDaemonSet(manifest *v1.List) (int, *appsv1.DaemonSet, error) {
 	return idx, daemonSet, nil
 }
 
-// func buildAddon(addonDefn existinginfrav1.Addon, imageRepository string, ClusterManifest, namespace string) ([][]byte, error) {
-//  log.WithField("addon", addonDefn.Name).Debug("building addon")
-//  // Generate the addon manifest.
-//  addon, err := addons.Get(addonDefn.Name)
-//  if err != nil {
-//      return nil, err
-//  }
-
-//  tmpDir, err := ioutil.TempDir("", "wksctl-apply-addons")
-//  if err != nil {
-//      return nil, err
-//  }
-
-//  manifests, err := addon.Build(addons.BuildOptions{
-//      // assume unqualified addon file params are in the same directory as the cluster.yaml
-//      BasePath:        filepath.Dir(ClusterManifestPath),
-//      OutputDirectory: tmpDir,
-//      ImageRepository: imageRepository,
-//      Params:          addonDefn.Params,
-//      YAML:            true,
-//  })
-//  if err != nil {
-//      return nil, err
-//  }
-//  retManifests := [][]byte{}
-//  // An addon can specify dependent YAML which needs to be added to the list of manifests
-//  retManifests, err = processDeps(addonDefn.Deps, retManifests, namespace)
-//  if err != nil {
-//      return nil, errors.Wrapf(err, "Failed to process dependent Yaml for addon: %s", addonDefn.Name)
-//  }
-//  // The build puts files in a temp dir we read them into []byte and return those
-//  // so we can cleanup the temp files
-//  for _, m := range manifests {
-//      content, err := manifest.WithNamespace(serializer.FromFile(m), namespace)
-//      if err != nil {
-//          return nil, err
-//      }
-//      retManifests = append(retManifests, content)
-//  }
-//  return retManifests, nil
-// }
-
-// func processDeps(deps []string, manifests [][]byte, namespace string) ([][]byte, error) {
-//  var retManifests = manifests
-//  for _, URL := range deps {
-//      logger := log.WithField("dep", URL)
-//      resp, err := http.Get(URL)
-//      if err != nil {
-//          logger.Warnf("Failed to load addon dependency - %v", err)
-//          continue
-//      }
-//      defer resp.Body.Close()
-//      contents, err := ioutil.ReadAll(resp.Body)
-//      if err != nil {
-//          logger.Warnf("Failed to load addon dependency - %v", err)
-//      }
-//      content, err := manifest.WithNamespace(serializer.FromBytes(contents), namespace)
-//      if err != nil {
-//          logger.Warnf("Failed to set namespace for manifest:\n%s\n", content)
-//      }
-//      logger.Debugln("Loading dependency")
-//      retManifests = append(retManifests, content)
-//  }
-//  return retManifests, nil
-// }
-
 func CreateConfigFileResourcesFromConfigMaps(fileSpecs []existinginfrav1.FileSpec, configMaps map[string]*v1.ConfigMap) ([]*resource.File, error) {
+	log.Info("Getting resources from config maps")
+	for name, val := range configMaps {
+		log.Infof("Config map '%s': %#v", name, *val)
+	}
 	fileResources := make([]*resource.File, len(fileSpecs))
 	for idx, file := range fileSpecs {
 		source := &file.Source
 		fileResource := &resource.File{Destination: file.Destination}
+		log.Infof("Getting file contents for: %#v", *source)
 		fileContents, ok := configMaps[source.ConfigMap].Data[source.Key]
 		if ok {
+			log.Info("Got file contents")
 			fileResource.Content = fileContents
 			fileResources[idx] = fileResource
 			continue
 		}
+		log.Infof("Failed to get file contents")
 		// if not in Data, check BinaryData
 		binaryContents, ok := configMaps[source.ConfigMap].BinaryData[source.Key]
 		if !ok {
 			return nil, fmt.Errorf("No config data for filespec: %v", file)
 		}
 		fileResource.Content = string(binaryContents)
+		fileResources[idx] = fileResource
+	}
+	return fileResources, nil
+}
+
+func CreateConfigFileResourcesFromFileSpecs(fileSpecs []existinginfrav1.FileSpec) ([]*resource.File, error) {
+	fileResources := make([]*resource.File, len(fileSpecs))
+	for idx, file := range fileSpecs {
+		source := &file.Source
+		fileResource := &resource.File{Destination: file.Destination}
+		fileResource.Content = source.Contents
 		fileResources[idx] = fileResource
 	}
 	return fileResources, nil
@@ -681,44 +486,47 @@ func (o OS) SetupNode(p *plan.Plan) error {
 
 // CreateNodeSetupPlan creates the plan that will be used to set up a node.
 func (o OS) CreateNodeSetupPlan(params NodeParams) (*plan.Plan, error) {
+	log.Info("Creating node setup plan")
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}
+	log.Info("Validated parameters")
 
 	cfg, err := envcfg.GetEnvSpecificConfig(o.PkgType, params.Namespace, params.KubeletConfig.CloudProvider, o.Runner)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("Got env config")
 
 	configFileResources, err := CreateConfigFileResourcesFromConfigMaps(params.ConfigFileSpecs, params.ProviderConfigMaps)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("Created config file resources")
 
 	b := plan.NewBuilder()
 
 	baseRsrc := recipe.BuildBasePlan(o.PkgType)
 	b.AddResource("install:base", baseRsrc)
-	// authConfigMap := params.AuthConfigMap
-	// if authConfigMap != nil && params.IsMaster {
-	//  for _, authType := range []string{"authentication", "authorization"} {
-	//      if err := addAuthConfigResources(b, authConfigMap, params.Secrets[authType], authType); err != nil {
-	//          return nil, err
-	//      }
-	//  }
-	// }
+
+	log.Info("Built base plan")
 
 	configRes := recipe.BuildConfigPlan(configFileResources)
 	b.AddResource("install:config", configRes, plan.DependOn("install:base"))
+	log.Info("Built config plan")
 	instCriRsrc := recipe.BuildCRIPlan(&params.CRI, cfg, o.PkgType)
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
+	log.Info("Built cri plan")
 
 	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))
 
 	kadmPJRsrc := recipe.BuildKubeadmPrejoinPlan(params.KubernetesVersion, cfg.UseIPTables)
 	b.AddResource("kubeadm:prejoin", kadmPJRsrc, plan.DependOn("install:k8s"))
+
+	log.Info("Built join plan")
 
 	kadmJoinRsrc := &resource.KubeadmJoin{
 		IsMaster:                 params.IsMaster,
@@ -806,40 +614,6 @@ func CreatePlan(b *plan.Builder) (*plan.Plan, error) {
 	return &p, nil
 }
 
-//  ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
-//  "github.com/bitnami-labs/sealed-secrets/pkg/crypto"
-//  "github.com/pkg/errors"
-//  log "github.com/sirupsen/logrus"
-//  existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
-//  "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/config"
-//  capeios "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/os"
-//  "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
-//  capeirecipe "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
-//  capeiresource "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
-//  "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
-//  "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
-//  "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
-//  "github.com/weaveworks/libgitops/pkg/serializer"
-//  "github.com/weaveworks/wksctl/pkg/addons"
-//  "github.com/weaveworks/wksctl/pkg/apis/wksprovider/controller/manifests"
-//  "github.com/weaveworks/wksctl/pkg/apis/wksprovider/machine/crds"
-//  "github.com/weaveworks/wksctl/pkg/cluster/machine"
-//  "github.com/weaveworks/wksctl/pkg/plan/recipe"
-//  "github.com/weaveworks/wksctl/pkg/plan/resource"
-//  "github.com/weaveworks/wksctl/pkg/scheme"
-//  "github.com/weaveworks/wksctl/pkg/specs"
-//  appsv1 "k8s.io/api/apps/v1"
-//  "k8s.io/api/apps/v1beta2"
-//  v1 "k8s.io/api/core/v1"
-//  metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-//  "k8s.io/apimachinery/pkg/runtime"
-//  "k8s.io/client-go/tools/clientcmd"
-//  clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-//  "k8s.io/client-go/util/keyutil"
-//  kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
-//  "sigs.k8s.io/yaml"
-// )
-
 type secretResourceSpec struct {
 	secretName string
 	decrypted  resource.SecretData
@@ -875,10 +649,6 @@ func getAPIServerArgs(providerSpec *existinginfrav1.ClusterSpec, pemSecretResour
 }
 
 func seedNodeSetupPlan(o *OS, params SeedNodeParams, providerSpec *existinginfrav1.ClusterSpec, providerConfigMaps map[string]*v1.ConfigMap, secretResources map[string]*secretResourceSpec, kubernetesVersion, kubernetesNamespace string) (*plan.Plan, error) {
-	// secrets := map[string]resource.SecretData{}
-	// for k, v := range secretResources {
-	//  secrets[k] = v.decrypted
-	// }
 	nodeParams := NodeParams{
 		IsMaster:             true,
 		MasterIP:             params.PrivateIP,
@@ -887,6 +657,7 @@ func seedNodeSetupPlan(o *OS, params SeedNodeParams, providerSpec *existinginfra
 		KubernetesVersion:    kubernetesVersion,
 		CRI:                  providerSpec.CRI,
 		ConfigFileSpecs:      providerSpec.OS.Files,
+		ProviderConfigMaps:   providerConfigMaps,
 		Namespace:            params.Namespace,
 		ControlPlaneEndpoint: providerSpec.ControlPlaneEndpoint,
 	}
@@ -908,33 +679,49 @@ func applySeedNodePlan(o *OS, p *plan.Plan) error {
 	return err
 }
 
-// func parseCluster(clusterManifestPath string) (eic *existinginfrav1.ExistingInfraCluster, err error) {
-//  f, err := os.Open(clusterManifestPath)
-//  if err != nil {
-//      return nil, err
-//  }
-//  _, b, err := specs.ParseCluster(f)
-//  return b, err
-// }
-
 func createConfigFileResourcesFromClusterSpec(providerSpec *existinginfrav1.ClusterSpec) (map[string][]byte, map[string]*v1.ConfigMap, []*resource.File, error) {
+	log.Info("Extracting config files")
 	fileSpecs := providerSpec.OS.Files
-	configMapManifests, err := getConfigMapManifests(fileSpecs)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	configMaps := make(map[string]*v1.ConfigMap)
-	for name, manifest := range configMapManifests {
-		cmap, err := getConfigMap(manifest)
+	log.Info("Got configs")
+
+	configMaps := map[string]*v1.ConfigMap{}
+	configMapManifests := map[string][]byte{}
+
+	log.Info("XXX 1")
+	for _, fspec := range fileSpecs {
+		log.Infof("fspec: %#v", fspec)
+		configMap := configMaps[fspec.Source.ConfigMap]
+		if configMap == nil {
+			configMap = &v1.ConfigMap{}
+			configMaps[fspec.Source.ConfigMap] = configMap
+		}
+		configMap.TypeMeta.APIVersion = "v1"
+		configMap.TypeMeta.Kind = "ConfigMap"
+		log.Info("XXX 2")
+		configMap.Name = fspec.Source.ConfigMap
+		log.Info("XXX 3")
+		configMap.Namespace = "system"
+		log.Info("XXX 4")
+		if configMap.Data == nil {
+			configMap.Data = map[string]string{}
+		}
+		configMap.Data[fspec.Source.Key] = fspec.Source.Contents
+		log.Info("XXX 5")
+		log.Infof("cmap: %#v", configMap)
+		log.Info("XXX 6")
+		manifest, err := yaml.Marshal(*configMap)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		configMaps[name] = cmap
+		log.Info("XXX 7")
+		configMapManifests[configMap.Name] = manifest
 	}
-	resources, err := CreateConfigFileResourcesFromConfigMaps(fileSpecs, configMaps)
+	log.Info("XXX 8")
+	resources, err := CreateConfigFileResourcesFromFileSpecs(fileSpecs)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	log.Info("Got config resources")
 	return configMapManifests, configMaps, resources, nil
 }
 
