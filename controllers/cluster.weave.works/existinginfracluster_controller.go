@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -48,6 +49,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -61,6 +63,14 @@ type ExistingInfraClusterReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	eventRecorder record.EventRecorder
+}
+
+type MachineInfo struct {
+	SSHKey      string `json:"sshKey"`
+	PublicIP    string `json:"publicIP"`
+	PublicPort  string `json:"publicPort"`
+	PrivateIP   string `json:"privateIP"`
+	PrivatePort string `json:"privatePort"`
 }
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginfraclusters,verbs=get;list;watch;create;update;patch;delete
@@ -264,7 +274,6 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	if err != nil {
 		return err
 	}
-	log.Infof("USER: %s, Host: %s, Port: %d", getSSHUser(machineInfo[0]), sp.GetMasterPublicAddress(), sp.MasterSpec.Public.Port)
 	sshClient, err := ssh.NewClient(ssh.ClientParams{
 		User:         getSSHUser(machineInfo[0]),
 		PrivateKey:   sshKey,
