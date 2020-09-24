@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"context"
 	"io"
 	"os/exec"
 	"syscall"
@@ -12,7 +13,7 @@ type LocalRunner struct{}
 var _ Runner = &LocalRunner{}
 
 // RunCommand implements Runner.
-func (r *LocalRunner) RunCommand(cmd string, stdin io.Reader) (stdouterr string, err error) {
+func (r *LocalRunner) RunCommand(ctx context.Context, cmd string, stdin io.Reader) (stdouterr string, err error) {
 	command := exec.Command("sh", "-c", cmd)
 	command.Stdin = stdin
 

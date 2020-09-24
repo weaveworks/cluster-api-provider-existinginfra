@@ -1,6 +1,7 @@
 package recipe
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -63,7 +64,7 @@ func BuildConfigPlan(files []*resource.File) plan.Resource {
 }
 
 // BuildCRIPlan creates a plan for installing a CRI.  Currently, Docker is the only supported CRI
-func BuildCRIPlan(criSpec *existinginfrav1.ContainerRuntime, cfg *envcfg.EnvSpecificConfig, pkgType resource.PkgType) plan.Resource {
+func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime, cfg *envcfg.EnvSpecificConfig, pkgType resource.PkgType) plan.Resource {
 	b := plan.NewBuilder()
 
 	// Docker Repo
@@ -142,9 +143,9 @@ func BuildCRIPlan(criSpec *existinginfrav1.ContainerRuntime, cfg *envcfg.EnvSpec
 
 	p.SetUndoCondition(func(r plan.Runner, _ plan.State) bool {
 		type AwareChanger interface {
-			WouldChangeState(r plan.Runner) (bool, error)
+			WouldChangeState(ctx context.Context, r plan.Runner) (bool, error)
 		}
-		chg, err := p.GetResource("install:docker").(AwareChanger).WouldChangeState(r)
+		chg, err := p.GetResource("install:docker").(AwareChanger).WouldChangeState(ctx, r)
 		return chg || (err != nil)
 	})
 	if err != nil {

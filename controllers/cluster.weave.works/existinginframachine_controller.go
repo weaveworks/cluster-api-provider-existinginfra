@@ -173,7 +173,7 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err != nil {
 		return err
 	}
-	if err := installer.SetupNode(nodePlan); err != nil {
+	if err := installer.SetupNode(ctx, nodePlan); err != nil {
 		return gerrors.Wrapf(err, "failed to set up machine %s", machine.Name)
 	}
 	addr := a.getMachineAddress(eim)
@@ -209,7 +209,7 @@ func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *exist
 	if err != nil {
 		return nil, nil, gerrors.Wrapf(err, "failed to create SSH client using %v", m.Spec.Private)
 	}
-	os, err := os.Identify(sshClient)
+	os, err := os.Identify(ctx, sshClient)
 	if err != nil {
 		return nil, nil, gerrors.Wrapf(err, "failed to identify machine %s's operating system", a.getMachineAddress(m))
 	}
@@ -505,7 +505,7 @@ func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Contex
 	if err != nil {
 		return err
 	}
-	if err := installer.SetupNode(&p); err != nil {
+	if err := installer.SetupNode(ctx, &p); err != nil {
 		log.Infof("Failed to upgrade node %s: %v", node.Name, err)
 		return err
 	}
@@ -544,7 +544,7 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 	}); err != nil {
 		return err
 	}
-	if err := installer.SetupNode(nodePlan); err != nil {
+	if err := installer.SetupNode(ctx, nodePlan); err != nil {
 		return gerrors.Wrapf(err, "failed to set up machine %s", machine.Name)
 	}
 	if err := a.uncordon(ctx, node); err != nil {
@@ -586,7 +586,7 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 			return nil, err
 		}
 	}
-	plan, err := installer.CreateNodeSetupPlan(os.NodeParams{
+	plan, err := installer.CreateNodeSetupPlan(ctx, os.NodeParams{
 		IsMaster:                 machine.Labels["set"] == "master",
 		MasterIP:                 masterIP,
 		MasterPort:               6443, // TODO: read this dynamically, from somewhere.
