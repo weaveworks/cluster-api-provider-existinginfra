@@ -197,7 +197,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 
 	// Get cluster
 	cluster := params.ExistingInfraCluster
-	log.Infof("Got cluster: %v", cluster)
+	log.Infof("Got cluster")
 
 	//	kubernetesVersion, kubernetesNamespace, err := machine.GetKubernetesVersionFromManifest(params.MachinesManifest)
 	kubernetesVersion := getKubernetesVersion(&cluster)
@@ -450,14 +450,11 @@ func findDaemonSet(manifest *v1.List) (int, *appsv1.DaemonSet, error) {
 
 func CreateConfigFileResourcesFromConfigMaps(fileSpecs []existinginfrav1.FileSpec, configMaps map[string]*v1.ConfigMap) ([]*resource.File, error) {
 	log.Info("Getting resources from config maps")
-	for name, val := range configMaps {
-		log.Infof("Config map '%s': %#v", name, *val)
-	}
 	fileResources := make([]*resource.File, len(fileSpecs))
 	for idx, file := range fileSpecs {
 		source := &file.Source
 		fileResource := &resource.File{Destination: file.Destination}
-		log.Infof("Getting file contents for: %#v", *source)
+		log.Info("Getting file contents")
 		fileContents, ok := configMaps[source.ConfigMap].Data[source.Key]
 		if ok {
 			log.Info("Got file contents")
@@ -750,9 +747,7 @@ func createConfigFileResourcesFromClusterSpec(providerSpec *existinginfrav1.Clus
 	configMaps := map[string]*v1.ConfigMap{}
 	configMapManifests := map[string][]byte{}
 
-	log.Info("XXX 1")
 	for _, fspec := range fileSpecs {
-		log.Infof("fspec: %#v", fspec)
 		configMap := configMaps[fspec.Source.ConfigMap]
 		if configMap == nil {
 			configMap = &v1.ConfigMap{}
@@ -760,26 +755,18 @@ func createConfigFileResourcesFromClusterSpec(providerSpec *existinginfrav1.Clus
 		}
 		configMap.TypeMeta.APIVersion = "v1"
 		configMap.TypeMeta.Kind = "ConfigMap"
-		log.Info("XXX 2")
 		configMap.Name = fspec.Source.ConfigMap
-		log.Info("XXX 3")
 		configMap.Namespace = "system"
-		log.Info("XXX 4")
 		if configMap.Data == nil {
 			configMap.Data = map[string]string{}
 		}
 		configMap.Data[fspec.Source.Key] = fspec.Source.Contents
-		log.Info("XXX 5")
-		log.Infof("cmap: %#v", configMap)
-		log.Info("XXX 6")
 		manifest, err := yaml.Marshal(*configMap)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		log.Info("XXX 7")
 		configMapManifests[configMap.Name] = manifest
 	}
-	log.Info("XXX 8")
 	resources, err := CreateConfigFileResourcesFromFileSpecs(fileSpecs)
 	if err != nil {
 		return nil, nil, nil, err

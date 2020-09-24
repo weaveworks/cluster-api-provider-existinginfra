@@ -90,7 +90,6 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	log.Infof("Annotations: %v", eic.Annotations)
 	if _, found := eic.Annotations[LocalController]; !found {
 		if _, found = eic.Annotations[Created]; !found {
 			contextLog.Info("About to set up new cluster")
@@ -180,7 +179,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	}
 
 	log.Infof("Created machines: %v, %v", machines, eims)
-	initError := r.initiateCluster(cluster, eic, machines, eims, machineInfo)
+	initError := r.initiateCluster(ctx, cluster, eic, machines, eims, machineInfo)
 	if initError != nil && finalError == nil { // no panic
 		r.deallocate(ctx, machineInfo, eic.Namespace)
 	}
@@ -211,17 +210,17 @@ func (a *ExistingInfraClusterReconciler) setEICAnnotation(ctx context.Context, e
 	return nil
 }
 
-func (a *ExistingInfraClusterReconciler) modifyCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
+func (r *ExistingInfraClusterReconciler) modifyCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
 	contextLog := log.WithFields(log.Fields{"cluster": eic.Name})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result clusterweaveworksv1alpha3.ExistingInfraCluster
-		getErr := a.Client.Get(ctx, client.ObjectKey{Name: eic.Name, Namespace: eic.Namespace}, &result)
+		getErr := r.Client.Get(ctx, client.ObjectKey{Name: eic.Name, Namespace: eic.Namespace}, &result)
 		if getErr != nil {
 			contextLog.Errorf("failed to read cluster info, assuming unsafe to update: %v", getErr)
 			return getErr
 		}
 		updater(&result)
-		updateErr := a.Client.Update(ctx, &result)
+		updateErr := r.Client.Update(ctx, &result)
 		if updateErr != nil {
 			contextLog.Errorf("failed attempt to update cluster annotation: %v", updateErr)
 			return updateErr
@@ -248,6 +247,7 @@ func (r *ExistingInfraClusterReconciler) recordEvent(object runtime.Object, even
 }
 
 func (r *ExistingInfraClusterReconciler) initiateCluster(
+	ctx context.Context,
 	cluster *clusterv1.Cluster,
 	eic *clusterweaveworksv1alpha3.ExistingInfraCluster,
 	machines []*clusterv1.Machine,
@@ -308,8 +308,6 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrap(err, "failed to marshal machine manifests")
 	}
 
-	log.Infof("Cluster manifest: %s, Machines manifest: %s", clusterManifest, machinesManifest)
-
 	log.Infof("About to set up seed node: %s", sp.GetMasterPublicAddress())
 	if err := capeios.SetupSeedNode(installer, capeios.SeedNodeParams{
 		PublicIP:             sp.GetMasterPublicAddress(),
@@ -337,6 +335,10 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	}); err != nil {
 		return gerrors.Wrapf(err, "failed to set up seed node (%s)", sp.GetMasterPublicAddress())
 	}
+
+	r.modifyCluster(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+		eic.Status.Ready = true
+	})
 
 	log.Infof("Finished setting up seed node: %s", sp.GetMasterPublicAddress())
 	return nil

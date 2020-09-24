@@ -164,6 +164,7 @@ spec:
       destination: /tmp/cloud-google-com.gpg.b64
     - source:
         configmap: docker
+        key: daemon.json
         contents: |
           {
             "log-driver": "json-file",
