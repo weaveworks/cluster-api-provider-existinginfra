@@ -45,7 +45,7 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	// TODO: Concurrent reconciliations should not be limited, remove this when
-	// 	the ExistingInfra{Cluster,Machine} reconcilers have been refactored
+	//  the ExistingInfra{Cluster,Machine} reconcilers have been refactored
 	opts = controller.Options{MaxConcurrentReconciles: 1}
 )
 

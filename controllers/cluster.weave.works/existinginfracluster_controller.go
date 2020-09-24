@@ -150,8 +150,14 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 
 func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
 	var finalError error
-	controlPlaneCount := eic.Spec.ControlPlaneMachineCount
-	workerCount := eic.Spec.WorkerMachineCount
+	controlPlaneCount, err := strconv.Atoi(eic.Spec.ControlPlaneMachineCount)
+	if err != nil {
+		return err
+	}
+	workerCount, err := strconv.Atoi(eic.Spec.WorkerMachineCount)
+	if err != nil {
+		return err
+	}
 	totalMachineCount := controlPlaneCount + workerCount
 	machineInfo, err := r.allocate(ctx, int(totalMachineCount), eic.Namespace)
 	if err != nil {

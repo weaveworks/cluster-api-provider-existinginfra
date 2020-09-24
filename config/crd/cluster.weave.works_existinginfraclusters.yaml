@@ -130,6 +130,12 @@ spec:
                 - value
                 type: object
               type: array
+            kubernetesVersion:
+              type: string
+            controlPlaneMachineCount:
+              type: string
+            workerMachineCount:
+              type: string
             os:
               properties:
                 files:

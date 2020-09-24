@@ -760,11 +760,9 @@ spec:
             kubernetesVersion:
               type: string
             controlPlaneMachineCount:
-              format: int32
-              type: integer
+              type: string
             workerMachineCount:
-              format: int32
-              type: integer
+              type: string
             os:
               properties:
                 files:
@@ -899,7 +897,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: system
+  namespace: ${NAMESPACE}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -1089,7 +1087,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: system
+  namespace: ${NAMESPACE}
 ---
 
 apiVersion: apps/v1
@@ -1135,10 +1133,10 @@ spec:
         operator: Exists
       containers:
       - name: controller
-        image: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"jrryjcksn/cluster-api-existinginfra-controller:controller-test"}
+        image: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"weaveworks/cluster-api-existinginfra-controller:v0.0.6"}
         env:
         - name: EXISTINGINFRA_CONTROLLER_IMAGE
-          value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"jrryjcksn/cluster-api-existinginfra-controller:controller-test"}
+          value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"weaveworks/cluster-api-existinginfra-controller:v0.0.6"}
         args:
         - --verbose
         resources:
