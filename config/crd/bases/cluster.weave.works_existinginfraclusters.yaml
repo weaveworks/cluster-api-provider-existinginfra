@@ -105,7 +105,7 @@ spec:
             controlPlaneEndpoint:
               type: string
             controlPlaneMachineCount:
-              type: integer
+              type: string
             controllerImage:
               type: string
             cri:
@@ -169,7 +169,7 @@ spec:
             user:
               type: string
             workerMachineCount:
-              type: integer
+              type: string
           required:
           - cri
           - user

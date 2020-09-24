@@ -33,8 +33,8 @@ type ClusterSpec struct {
 	User                     string `json:"user"`
 	KubernetesVersion        string `json:"kubernetesVersion,omitempty"`
 	ControllerImage          string `json:"controllerImage,omitempty"`
-	ControlPlaneMachineCount uint16 `json:"controlPlaneMachineCount,omitempty"`
-	WorkerMachineCount       uint16 `json:"workerMachineCount,omitempty"`
+	ControlPlaneMachineCount string `json:"controlPlaneMachineCount,omitempty"`
+	WorkerMachineCount       string `json:"workerMachineCount,omitempty"`
 	DeprecatedSSHKeyPath     string `json:"sshKeyPath,omitempty"`
 	HTTPProxy                string `json:"httpProxy,omitempty"`
 
