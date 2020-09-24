@@ -43,6 +43,8 @@ func (r *Run) Undo(ctx context.Context, runner plan.Runner, current plan.State) 
 	if r.UndoScript == nil {
 		if r.UndoResource == nil {
 			return nil
+		} else {
+			return r.UndoResource.Undo(ctx, runner, plan.EmptyState)
 		}
 		return r.UndoResource.Undo(ctx, runner, plan.EmptyState)
 	}

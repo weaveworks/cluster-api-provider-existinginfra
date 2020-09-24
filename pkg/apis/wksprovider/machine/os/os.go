@@ -814,6 +814,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	configRes := recipe.BuildConfigPlan(configFileResources)
 	b.AddResource("install:config", configRes, plan.DependOn("install:base"))
 	log.Info("Built config plan")
+
 	instCriRsrc := recipe.BuildCRIPlan(ctx, &params.CRI, cfg, o.PkgType)
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
