@@ -111,6 +111,46 @@ func GetCRDs(fs http.FileSystem) ([]CRDFile, error) {
 	return crdFiles, nil
 }
 
+type crdFile struct {
+	fname string
+	data  []byte
+}
+
+// Retrieve all CRD definitions needed for cluster API
+func getCRDs() ([]crdFile, error) {
+	log.Info("Getting CRDs")
+	crddir, err := crds.CRDs.Open(".")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list cluster API CRDs")
+	}
+	log.Info("Opened CRDs")
+	crdFiles := make([]crdFile, 0)
+	for {
+		entry, err := crddir.Readdir(1)
+		if err != nil && err != io.EOF {
+			return nil, errors.Wrap(err, "failed to open cluster API CRD directory")
+		}
+		if entry == nil {
+			break
+		}
+		if entry[0].IsDir() || !strings.HasPrefix(entry[0].Name(), "cluster") {
+			continue
+		}
+		fname := entry[0].Name()
+		crd, err := crds.CRDs.Open(fname)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to open cluster API CRD")
+		}
+		data, err := ioutil.ReadAll(crd)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read cluster API CRD")
+		}
+		crdFiles = append(crdFiles, crdFile{fname, data})
+	}
+	log.Info("Got CRDs")
+	return crdFiles, nil
+}
+
 // GitParams are all SeedNodeParams related to the user's Git(Hub) repo
 type GitParams struct {
 	GitURL           string
