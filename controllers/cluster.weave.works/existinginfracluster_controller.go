@@ -254,8 +254,6 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	eims []*clusterweaveworksv1alpha3.ExistingInfraMachine,
 	machineInfo []*MachineInfo) error {
 	sp := specs.New(cluster, eic, machines, eims)
-	log.Infof("INFO: %v", *machineInfo[0])
-
 	sshKey, err := getSSHKey(machineInfo[0])
 	if err != nil {
 		return err
@@ -288,11 +286,24 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 
 	ns := eic.Namespace
 
+	cleanJson := eic.Annotations["kubectl.kubernetes.io/last-applied-configuration"]
+	var cleanEic clusterweaveworksv1alpha3.ExistingInfraCluster
+	if err := json.Unmarshal([]byte(cleanJson), &cleanEic); err != nil {
+		return gerrors.Wrap(err, "failed to extract configuration")
+	}
+	eic = &cleanEic
 	clusterManifest, err := marshal(cluster, eic)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal cluster manifests")
 	}
-	machinesManifest, err := marshal(machines, eims)
+	machineObjs := []interface{}{}
+	for _, m := range machines {
+		machineObjs = append(machineObjs, m)
+	}
+	for _, e := range eims {
+		machineObjs = append(machineObjs, e)
+	}
+	machinesManifest, err := marshal(machineObjs...)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal machine manifests")
 	}
@@ -440,16 +451,17 @@ func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machine
 }
 
 func (r *ExistingInfraClusterReconciler) getCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) (*clusterv1.Cluster, error) {
-	var cluster clusterv1.Cluster
-	err := r.Client.Get(ctx, client.ObjectKey{Namespace: eic.Namespace, Name: eic.Name}, &cluster)
+	var inputCluster clusterv1.Cluster
+	err := r.Client.Get(ctx, client.ObjectKey{Namespace: eic.Namespace, Name: eic.Name}, &inputCluster)
 	if err != nil {
 		return nil, err
 	}
-	cleanJson := cluster.Annotations["kubectl.kubernetes.io/last-applied-configuration"]
-	if err := json.Unmarshal([]byte(cleanJson), &cluster); err != nil {
+	cleanJson := inputCluster.Annotations["kubectl.kubernetes.io/last-applied-configuration"]
+	var outputCluster clusterv1.Cluster
+	if err := json.Unmarshal([]byte(cleanJson), &outputCluster); err != nil {
 		return nil, err
 	}
-	return &cluster, nil
+	return &outputCluster, nil
 }
 
 func (r *ExistingInfraClusterReconciler) createMachines(minfo []*MachineInfo, controlPlaneCount int, k8sVersion, namespace, name string) ([]*clusterv1.Machine, []*clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
@@ -485,9 +497,12 @@ func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion,
 	machineName := fmt.Sprintf("%s-%s-%d", name, baseName, idx)
 
 	log.Infof("Machine name: %s", machineName)
+	machine.TypeMeta.APIVersion = "cluster.x-k8s.io/v1alpha3"
+	machine.TypeMeta.Kind = "Machine"
 	machine.Namespace = ns
 	machine.Name = machineName
 	machine.Spec.Version = &k8sVersion
+	machine.Spec.ClusterName = name
 	machine.Spec.InfrastructureRef.Kind = "ExistingInfraMachine"
 	machine.Spec.InfrastructureRef.Name = machineName
 	machine.Spec.InfrastructureRef.Namespace = ns
@@ -497,6 +512,8 @@ func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion,
 
 	log.Infof("Creating existinginfra machine for: %v", *minfo)
 
+	eim.TypeMeta.APIVersion = "cluster.weave.works/v1alpha3"
+	eim.TypeMeta.Kind = "ExistingInfraMachine"
 	eim.Namespace = ns
 	eim.Name = machineName
 

@@ -6,8 +6,8 @@ import (
 	//	"encoding/base64"
 	//	"encoding/json"
 	"fmt"
-	//	"io"
-	//	"io/ioutil"
+	"io"
+	"io/ioutil"
 	//	"net/http"
 	// "os"
 	"path/filepath"
@@ -19,12 +19,15 @@ import (
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/config"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/crds"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
+	"github.com/weaveworks/libgitops/pkg/serializer"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,6 +63,46 @@ type OS struct {
 var (
 	pemKeys = []string{"certificate-authority", "client-certificate", "client-key"}
 )
+
+type crdFile struct {
+	fname string
+	data  []byte
+}
+
+// Retrieve all CRD definitions needed for cluster API
+func getCRDs() ([]crdFile, error) {
+	log.Info("Getting CRDs")
+	crddir, err := crds.CRDs.Open(".")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list cluster API CRDs")
+	}
+	log.Info("Opened CRDs")
+	crdFiles := make([]crdFile, 0)
+	for {
+		entry, err := crddir.Readdir(1)
+		if err != nil && err != io.EOF {
+			return nil, errors.Wrap(err, "failed to open cluster API CRD directory")
+		}
+		if entry == nil {
+			break
+		}
+		if entry[0].IsDir() || !strings.HasPrefix(entry[0].Name(), "cluster") {
+			continue
+		}
+		fname := entry[0].Name()
+		crd, err := crds.CRDs.Open(fname)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to open cluster API CRD")
+		}
+		data, err := ioutil.ReadAll(crd)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read cluster API CRD")
+		}
+		crdFiles = append(crdFiles, crdFile{fname, data})
+	}
+	log.Info("Got CRDs")
+	return crdFiles, nil
+}
 
 // GitParams are all SeedNodeParams related to the user's Git(Hub) repo
 type GitParams struct {
@@ -230,8 +273,6 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	// TODO(damien): Add a CNI section in cluster.yaml once we support more than one CNI plugin.
 	const cni = "weave-net"
 
-	// cniRsc := recipe.BuildCNIPlan(cni, manifests)
-
 	var manifest string
 	fetchRsc := &resource.Run{Script: object.String("kubectl version | base64 | tr -d '\n'"), Output: &manifest}
 	b.AddResource("fetch:cni", fetchRsc, plan.DependOn("kubeadm:init"))
@@ -240,7 +281,15 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	b.AddResource("install:cni", cniRsc, plan.DependOn("fetch:cni"))
 	log.Info("Got cni resource")
 
-	kubectlApplyDeps := []string{"install:cni"}
+	// Add resources to apply the cluster API's CRDs so that Kubernetes
+	// understands objects like Cluster, Machine, etc.
+
+	crdIDs, err := addClusterAPICRDs(b)
+	if err != nil {
+		return nil, err
+	}
+
+	kubectlApplyDeps := append([]string{"kubeadm:init"}, crdIDs...)
 
 	// Set plan as an annotation on node, just like controller does
 	seedNodePlan, err := seedNodeSetupPlan(o, params, &cluster.Spec, configMaps, map[string]*secretResourceSpec{}, kubernetesVersion, params.Namespace)
@@ -259,7 +308,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 
 	applyClstrRsc := &resource.KubectlApply{Manifest: []byte(params.ClusterManifest), Namespace: object.String(params.Namespace)}
 
-	b.AddResource("kubectl:apply:cluster", applyClstrRsc, plan.DependOn("install:configmaps"))
+	b.AddResource("kubectl:apply:cluster", applyClstrRsc, plan.DependOn("install:configmaps", kubectlApplyDeps...))
 
 	mManRsc := &resource.KubectlApply{Manifest: []byte(params.MachinesManifest), Filename: object.String("machinesmanifest"), Namespace: object.String(params.Namespace)}
 	b.AddResource("kubectl:apply:machines", mManRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
@@ -286,12 +335,11 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 }
 
 func capiControllerManifest(controller ControllerParams, namespace, configDir string) ([]byte, error) {
-	return []byte(capiControllerManifestString), nil
+	return manifest.WithNamespace(serializer.FromBytes([]byte(capiControllerManifestString)), namespace)
 }
 
 func wksControllerManifest(controller ControllerParams, namespace, configDir string) ([]byte, error) {
-	manifestbytes := []byte(wksControllerManifestString)
-	return manifestbytes, nil
+	return manifest.WithNamespace(serializer.FromBytes([]byte(wksControllerManifestString)), namespace)
 }
 
 func getCluster() (eic *existinginfrav1.ExistingInfraCluster, err error) {
@@ -646,6 +694,21 @@ func getAPIServerArgs(providerSpec *existinginfrav1.ClusterSpec, pemSecretResour
 		result[arg.Name] = arg.Value
 	}
 	return result
+}
+
+func addClusterAPICRDs(b *plan.Builder) ([]string, error) {
+	crds, err := getCRDs()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list cluster API CRDs")
+	}
+	crdIDs := make([]string, 0)
+	for _, crdFile := range crds {
+		id := fmt.Sprintf("kubectl:apply:%s", crdFile.fname)
+		crdIDs = append(crdIDs, id)
+		rsrc := &resource.KubectlApply{Filename: object.String(crdFile.fname), Manifest: crdFile.data, WaitCondition: "condition=Established"}
+		b.AddResource(id, rsrc, plan.DependOn("install:cni"))
+	}
+	return crdIDs, nil
 }
 
 func seedNodeSetupPlan(o *OS, params SeedNodeParams, providerSpec *existinginfrav1.ClusterSpec, providerConfigMaps map[string]*v1.ConfigMap, secretResources map[string]*secretResourceSpec, kubernetesVersion, kubernetesNamespace string) (*plan.Plan, error) {
