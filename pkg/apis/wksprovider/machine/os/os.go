@@ -39,15 +39,6 @@ type Identifiers struct {
 	SystemUUID string
 }
 
-// IDs returns this machine's ID and system UUID.
-func (o OS) IDs() (*Identifiers, error) {
-	osres, err := resource.NewOS(o.Runner)
-	if err != nil {
-		return nil, err
-	}
-	return &Identifiers{MachineID: osres.MachineID, SystemUUID: osres.SystemUUID}, nil
-}
-
 func CreateConfigFileResourcesFromConfigMaps(fileSpecs []existinginfrav1.FileSpec, configMaps map[string]*v1.ConfigMap) ([]*resource.File, error) {
 	fileResources := make([]*resource.File, len(fileSpecs))
 	for idx, file := range fileSpecs {
