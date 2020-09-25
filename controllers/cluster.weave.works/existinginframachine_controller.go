@@ -797,6 +797,9 @@ func generateProviderID(nodeName string) string {
 
 // Note: does not modify the Node passed in
 func (a *ExistingInfraMachineReconciler) setNodeProviderIDIfNecessary(ctx context.Context, node *corev1.Node) error {
+	if node.Spec.ProviderID != "" {
+		return nil
+	}
 	err := a.modifyNode(ctx, node.Name, func(node *corev1.Node) {
 		node.Spec.ProviderID = generateProviderID(node.Name)
 	})
