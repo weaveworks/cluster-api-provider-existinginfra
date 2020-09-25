@@ -82,13 +82,13 @@ type ExistingInfraMachineReconciler struct {
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines/status,verbs=get;update;patch
 
-func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
+func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.TODO() // upstream will add this eventually
 	contextLog := log.WithField("name", req.NamespacedName)
 
 	// request only contains the name of the object, so fetch it from the api-server
 	eim := &existinginfrav1.ExistingInfraMachine{}
-	err := r.Client.Get(ctx, req.NamespacedName, eim)
+	err := a.Client.Get(ctx, req.NamespacedName, eim)
 	if err != nil {
 		if apierrs.IsNotFound(err) { // isn't there; give in
 			return ctrl.Result{}, nil
@@ -97,7 +97,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	}
 
 	// Get Machine via OwnerReferences
-	machine, err := util.GetOwnerMachine(ctx, r.Client, eim.ObjectMeta)
+	machine, err := util.GetOwnerMachine(ctx, a.Client, eim.ObjectMeta)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -108,7 +108,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	contextLog = contextLog.WithField("machine", machine.Name)
 
 	// Get Cluster via label "cluster.x-k8s.io/cluster-name"
-	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, machine.ObjectMeta)
+	cluster, err := util.GetClusterFromMetadata(ctx, a.Client, machine.ObjectMeta)
 	if err != nil {
 		contextLog.Info("Machine is missing cluster label or cluster does not exist")
 		return ctrl.Result{}, nil
@@ -126,7 +126,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, nil
 	}
 	eic := &existinginfrav1.ExistingInfraCluster{}
-	if err := r.Client.Get(ctx, client.ObjectKey{
+	if err := a.Client.Get(ctx, client.ObjectKey{
 		Namespace: eim.Namespace,
 		Name:      cluster.Spec.InfrastructureRef.Name,
 	}, eic); err != nil {
@@ -135,7 +135,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	}
 
 	// Initialize the patch helper
-	patchHelper, err := patch.NewHelper(eim, r.Client)
+	patchHelper, err := patch.NewHelper(eim, a.Client)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -151,14 +151,14 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 
 	// Object still there but with deletion timestamp => run our finalizer
 	if !eim.ObjectMeta.DeletionTimestamp.IsZero() {
-		err := r.delete(ctx, eic, machine, eim)
+		err := a.delete(ctx, eic, machine, eim)
 		if err != nil {
 			contextLog.Errorf("failed to delete machine: %v", err)
 		}
 		return ctrl.Result{}, err
 	}
 
-	err = r.update(ctx, eic, machine, eim)
+	err = a.update(ctx, eic, machine, eim)
 	if err != nil {
 		contextLog.Errorf("failed to update machine: %v", err)
 	}
@@ -1012,8 +1012,8 @@ func (a *ExistingInfraMachineReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 	return nil
 }
 
-func (r *ExistingInfraMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerOptions(mgr, controller.Options{})
+func (a *ExistingInfraMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return a.SetupWithManagerOptions(mgr, controller.Options{})
 }
 
 // MachineControllerParams groups required inputs to create a machine actuator.
