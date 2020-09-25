@@ -792,7 +792,7 @@ func (a *ExistingInfraMachineReconciler) setNodeAnnotation(ctx context.Context, 
 }
 
 func generateProviderID(nodeName string) string {
-	return "wks://" + nodeName
+	return "existingInfra://" + nodeName
 }
 
 // Note: does not modify the Node passed in
