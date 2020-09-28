@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/conversion"
 )
 
-var downgradingConversionError = errors.New("invalid conversion, downgrading conversions are not supported")
+var errDowngradingConversion = errors.New("invalid conversion, downgrading conversions are not supported")
 
 func Convert_v1alpha1_APIServer_To_v1alpha3_APIServer(_ *APIServer, _ *v1alpha3.APIServer, _ conversion.Scope) error {
 	// in.ExternalLoadBalancer is unused in v1alpha3
@@ -37,7 +37,7 @@ func Convert_v1alpha1_ClusterSpec_To_v1alpha3_ClusterSpec(in *ClusterSpec, out *
 
 func Convert_v1alpha3_ClusterSpec_To_v1alpha1_ClusterSpec(_ *v1alpha3.ClusterSpec, _ *ClusterSpec, _ conversion.Scope) error {
 	// Downgrading conversions are not supported
-	return downgradingConversionError
+	return errDowngradingConversion
 }
 
 func Convert_v1alpha1_MachineSpec_To_v1alpha3_MachineSpec(in *MachineSpec, out *v1alpha3.MachineSpec, s conversion.Scope) error {
@@ -51,5 +51,5 @@ func Convert_v1alpha1_MachineSpec_To_v1alpha3_MachineSpec(in *MachineSpec, out *
 
 func Convert_v1alpha3_MachineSpec_To_v1alpha1_MachineSpec(_ *v1alpha3.MachineSpec, _ *MachineSpec, _ conversion.Scope) error {
 	// Downgrading conversions are not supported
-	return downgradingConversionError
+	return errDowngradingConversion
 }
