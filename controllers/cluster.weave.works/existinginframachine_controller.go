@@ -277,14 +277,12 @@ func (a *ExistingInfraMachineReconciler) token(ctx context.Context, ID string) (
 			return "", gerrors.Wrapf(err, "failed to find old secret %s/%s or generate a new one", ns, name)
 		}
 		secret = newSecret
-	} else {
-		if bootstrapTokenHasExpired(secret) {
-			newSecret, err := a.installNewBootstrapToken(ctx, ns)
-			if err != nil {
-				return "", gerrors.Wrapf(err, "failed to replace expired secret %s/%s with a new one", ns, name)
-			}
-			secret = newSecret
+	} else if bootstrapTokenHasExpired(secret) {
+		newSecret, err := a.installNewBootstrapToken(ctx, ns)
+		if err != nil {
+			return "", gerrors.Wrapf(err, "failed to replace expired secret %s/%s with a new one", ns, name)
 		}
+		secret = newSecret
 	}
 	tokenID, ok := secret.Data[bootstrapapi.BootstrapTokenIDKey]
 	if !ok {
@@ -454,7 +452,8 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		}
 		contextLog.Infof("Is controller: %t", isController)
 		if isMaster {
-			if isController {
+			switch {
+			case isController:
 				// If there is no error, this will end the run of this reconciliation since the controller will be migrated
 				if err := drain.Drain(node, a.clientSet, drain.Params{
 					Force:               true,
@@ -463,9 +462,9 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 				}); err != nil {
 					return err
 				}
-			} else if isOriginal {
+			case isOriginal:
 				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.OriginalMaster)
-			} else {
+			default:
 				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.SecondaryMaster)
 			}
 		}
