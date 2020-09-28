@@ -103,7 +103,7 @@ func readFileCommand(fnames ...string) string {
 
 var (
 	machineIDParams               = newFactGatheringParams("MachineID", "/etc/machine-id", "/var/lib/dbus/machine-id")
-	sysUuidParams                 = newFactGatheringParams("SystemUUID", "/sys/class/dmi/id/product_uuid", "/etc/machine-id")
+	sysUUIDParams                 = newFactGatheringParams("SystemUUID", "/sys/class/dmi/id/product_uuid", "/etc/machine-id")
 	_               plan.Resource = plan.RegisterResource(&OS{})
 )
 
@@ -226,7 +226,7 @@ func getMachineID(ctx context.Context, p *OS, r plan.Runner) error {
 }
 
 func getSystemUUID(ctx context.Context, p *OS, r plan.Runner) error {
-	return p.getValueFromFileContents(ctx, sysUuidParams, r)
+	return p.getValueFromFileContents(ctx, sysUUIDParams, r)
 }
 
 func (p *OS) getValueFromFileContents(ctx context.Context, fgparams factGatheringParams, r plan.Runner) error {
