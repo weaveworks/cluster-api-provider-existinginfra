@@ -2,6 +2,7 @@ package scripts
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,12 +15,12 @@ import (
 type runner interface {
 	// RunCommand runs the provided command in a shell.
 	// cmd can be more than one single command, it can be a full shell script.
-	RunCommand(cmd string, stdin io.Reader) (stdouterr string, err error)
+	RunCommand(ctx context.Context, cmd string, stdin io.Reader) (stdouterr string, err error)
 }
 
-func WriteFile(content []byte, dstPath string, perm os.FileMode, runner runner) error {
+func WriteFile(ctx context.Context, content []byte, dstPath string, perm os.FileMode, runner runner) error {
 	input := bytes.NewReader(content)
 	cmd := fmt.Sprintf("mkdir -pv $(dirname %q) && sed -n 'w %s' && chmod 0%o %q", dstPath, dstPath, perm, dstPath)
-	_, err := runner.RunCommand(cmd, input)
+	_, err := runner.RunCommand(ctx, cmd, input)
 	return err
 }

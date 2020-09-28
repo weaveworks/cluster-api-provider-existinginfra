@@ -1,6 +1,10 @@
 package resource
 
-import "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+import (
+	"context"
+
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+)
 
 // Base can be embedded into a struct to provide a default implementation of
 // plan.Resource.
@@ -14,16 +18,16 @@ func (b *Base) State() plan.State {
 }
 
 // QueryState implements plan.Resource.
-func (b *Base) QueryState(runner plan.Runner) (plan.State, error) {
+func (b *Base) QueryState(ctx context.Context, runner plan.Runner) (plan.State, error) {
 	return plan.EmptyState, nil
 }
 
 // Apply implements plan.Resource.
-func (b *Base) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
+func (b *Base) Apply(ctx context.Context, runner plan.Runner, diff plan.Diff) (bool, error) {
 	return true, nil
 }
 
 // Undo implements plan.Resource.
-func (b *Base) Undo(runner plan.Runner, current plan.State) error {
+func (b *Base) Undo(ctx context.Context, runner plan.Runner, current plan.State) error {
 	return nil
 }

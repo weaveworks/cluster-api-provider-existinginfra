@@ -1,6 +1,7 @@
 package os
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -36,15 +37,6 @@ type OS struct {
 type Identifiers struct {
 	MachineID  string
 	SystemUUID string
-}
-
-// IDs returns this machine's ID and system UUID.
-func (o OS) IDs() (*Identifiers, error) {
-	osres, err := resource.NewOS(o.Runner)
-	if err != nil {
-		return nil, err
-	}
-	return &Identifiers{MachineID: osres.MachineID, SystemUUID: osres.SystemUUID}, nil
 }
 
 func CreateConfigFileResourcesFromConfigMaps(fileSpecs []existinginfrav1.FileSpec, configMaps map[string]*v1.ConfigMap) ([]*resource.File, error) {
@@ -101,12 +93,12 @@ func (params NodeParams) Validate() error {
 // SetupNode installs Kubernetes on this machine and configures it based on the
 // manifests stored during the initialization of the cluster, when
 // SetupSeedNode was called.
-func (o OS) SetupNode(p *plan.Plan) error {
+func (o OS) SetupNode(ctx context.Context, p *plan.Plan) error {
 	// We don't know the state of the machine so undo at the beginning
 	//nolint:errcheck
-	p.Undo(o.Runner, plan.EmptyState) // TODO: Implement error checking
+	p.Undo(ctx, o.Runner, plan.EmptyState) // TODO: Implement error checking
 
-	_, err := p.Apply(o.Runner, plan.EmptyDiff())
+	_, err := p.Apply(ctx, o.Runner, plan.EmptyDiff())
 	if err != nil {
 		log.Errorf("Apply of Plan failed:\n%s\n", err)
 	}
@@ -114,12 +106,12 @@ func (o OS) SetupNode(p *plan.Plan) error {
 }
 
 // CreateNodeSetupPlan creates the plan that will be used to set up a node.
-func (o OS) CreateNodeSetupPlan(params NodeParams) (*plan.Plan, error) {
+func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.Plan, error) {
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}
 
-	cfg, err := envcfg.GetEnvSpecificConfig(o.PkgType, params.Namespace, params.KubeletConfig.CloudProvider, o.Runner)
+	cfg, err := envcfg.GetEnvSpecificConfig(ctx, o.PkgType, params.Namespace, params.KubeletConfig.CloudProvider, o.Runner)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +136,7 @@ func (o OS) CreateNodeSetupPlan(params NodeParams) (*plan.Plan, error) {
 
 	configRes := recipe.BuildConfigPlan(configFileResources)
 	b.AddResource("install:config", configRes, plan.DependOn("install:base"))
-	instCriRsrc := recipe.BuildCRIPlan(&params.CRI, cfg, o.PkgType)
+	instCriRsrc := recipe.BuildCRIPlan(ctx, &params.CRI, cfg, o.PkgType)
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 
 	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
@@ -194,8 +186,8 @@ const (
 
 // Identify uses the provided SSH client to identify the operating system of
 // the machine it is configured to talk to.
-func Identify(sshClient plan.Runner) (*OS, error) {
-	osID, err := fetchOSID(sshClient)
+func Identify(ctx context.Context, sshClient plan.Runner) (*OS, error) {
+	osID, err := fetchOSID(ctx, sshClient)
 	if err != nil {
 		return nil, err
 	}
@@ -218,8 +210,8 @@ const (
 	idxOSID            = 1
 )
 
-func fetchOSID(sshClient plan.Runner) (string, error) {
-	stdOut, err := sshClient.RunCommand("cat /etc/*release", nil)
+func fetchOSID(ctx context.Context, sshClient plan.Runner) (string, error) {
+	stdOut, err := sshClient.RunCommand(ctx, "cat /etc/*release", nil)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to fetch operating system ID")
 	}
