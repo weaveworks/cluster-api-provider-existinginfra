@@ -89,9 +89,9 @@ func (p *Service) Apply(ctx context.Context, r plan.Runner, diff plan.Diff) (boo
 	// Active
 	// XXX: We need to think about what happens when a unit is in failed status
 	// (current["status"] is "failed").
-	if p.Status == ServiceActive && current.String("status") == "inactive" {
+	if p.Status == ServiceActive && current.String("status") == ServiceInactive {
 		output, err = systemd(ctx, r, "start %s", p.Name)
-	} else if p.Status == ServiceInactive && current.String("status") != "inactive" {
+	} else if p.Status == ServiceInactive && current.String("status") != ServiceInactive {
 		output, err = systemd(ctx, r, "stop %s", p.Name)
 	}
 	if err != nil {
@@ -113,7 +113,7 @@ func (p *Service) Undo(ctx context.Context, r plan.Runner, current plan.State) e
 		}
 	}
 
-	if current.String("status") != "inactive" {
+	if current.String("status") != ServiceInactive {
 		output, err := systemd(ctx, r, "stop %s", p.Name)
 		if err != nil {
 			if strings.Contains(output, "not loaded") {
