@@ -252,10 +252,10 @@ func (a *ExistingInfraMachineReconciler) kubeadmJoinSecrets(ctx context.Context)
 	}, nil
 }
 
-func (a *ExistingInfraMachineReconciler) updateKubeadmJoinSecrets(ctx context.Context, ID string, secret *corev1.Secret) error {
-	len := base64.StdEncoding.EncodedLen(len(ID))
+func (a *ExistingInfraMachineReconciler) updateKubeadmJoinSecrets(ctx context.Context, id string, secret *corev1.Secret) error {
+	len := base64.StdEncoding.EncodedLen(len(id))
 	enc := make([]byte, len)
-	base64.StdEncoding.Encode(enc, []byte(ID))
+	base64.StdEncoding.Encode(enc, []byte(id))
 	patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\"}}", bootstrapTokenID, enc))
 	err := a.Client.Patch(ctx, secret, client.RawPatch(types.StrategicMergePatchType, patch))
 	if err != nil {
@@ -264,9 +264,9 @@ func (a *ExistingInfraMachineReconciler) updateKubeadmJoinSecrets(ctx context.Co
 	return err
 }
 
-func (a *ExistingInfraMachineReconciler) token(ctx context.Context, ID string) (string, error) {
+func (a *ExistingInfraMachineReconciler) token(ctx context.Context, id string) (string, error) {
 	ns := "kube-system"
-	name := fmt.Sprintf("%s%s", bootstrapapi.BootstrapTokenSecretPrefix, ID)
+	name := fmt.Sprintf("%s%s", bootstrapapi.BootstrapTokenSecretPrefix, id)
 	secret := &corev1.Secret{}
 	err := a.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, secret)
 	if err != nil {
