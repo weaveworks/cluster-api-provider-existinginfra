@@ -88,7 +88,7 @@ func (p *RPM) QueryState(ctx context.Context, r plan.Runner) (plan.State, error)
 	}
 	if err != nil {
 		// An error happened running rpm.
-		return plan.EmptyState, fmt.Errorf("Query rpm %s failed: %v -- %s", p.label(), err, output)
+		return plan.EmptyState, fmt.Errorf("query rpm %s failed: %v -- %s", p.label(), err, output)
 	}
 
 	// XXX: in theory rpm queries can return multiple versions of the same package

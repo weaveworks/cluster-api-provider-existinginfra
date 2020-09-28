@@ -675,7 +675,7 @@ func (p *Plan) Undo(ctx context.Context, runner Runner, current State) error {
 		}
 	}
 	if len(errors) != 0 {
-		return fmt.Errorf("Partial undo completed due to the following errors:\n%s", formatNestedErrors(errors))
+		return fmt.Errorf("partial undo completed due to the following errors:\n%s", formatNestedErrors(errors))
 	}
 	return nil
 }
@@ -919,7 +919,7 @@ func (p *Plan) processResource(
 	if output.ValidityStatus != Valid {
 		logger.Error("Failing (Bad Upstream Resource)")
 		sendResults(output, conn)
-		return errors.New("Failing (Bad Upstream Resource)")
+		return errors.New("failing (bad upstream resource)")
 	}
 	// if all upstream resources are valid, see if the state of the current
 	// resource matches its desired state and, if not, re-apply the resource
