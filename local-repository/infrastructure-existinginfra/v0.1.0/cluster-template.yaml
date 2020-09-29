@@ -50,15 +50,15 @@ spec:
         key: docker-ce.repo
         contents: |
           [docker-ce-stable]
-          name=Docker CE Stable - $basearch
-          baseurl=https://download.docker.com/linux/centos/7/$basearch/stable
+          name=Docker CE Stable - \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/\$basearch/stable
           enabled=1
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-stable-debuginfo]
-          name=Docker CE Stable - Debuginfo $basearch
-          baseurl=https://download.docker.com/linux/centos/7/debug-$basearch/stable
+          name=Docker CE Stable - Debuginfo \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/debug-\$basearch/stable
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
@@ -71,15 +71,15 @@ spec:
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-edge]
-          name=Docker CE Edge - $basearch
-          baseurl=https://download.docker.com/linux/centos/7/$basearch/edge
+          name=Docker CE Edge - \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/\$basearch/edge
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-edge-debuginfo]
-          name=Docker CE Edge - Debuginfo $basearch
-          baseurl=https://download.docker.com/linux/centos/7/debug-$basearch/edge
+          name=Docker CE Edge - Debuginfo \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/debug-\$basearch/edge
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
@@ -92,15 +92,15 @@ spec:
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-test]
-          name=Docker CE Test - $basearch
-          baseurl=https://download.docker.com/linux/centos/7/$basearch/test
+          name=Docker CE Test - \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/\$basearch/test
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-test-debuginfo]
-          name=Docker CE Test - Debuginfo $basearch
-          baseurl=https://download.docker.com/linux/centos/7/debug-$basearch/test
+          name=Docker CE Test - Debuginfo \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/debug-\$basearch/test
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
@@ -113,15 +113,15 @@ spec:
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-nightly]
-          name=Docker CE Nightly - $basearch
-          baseurl=https://download.docker.com/linux/centos/7/$basearch/nightly
+          name=Docker CE Nightly - \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/\$basearch/nightly
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg
 
           [docker-ce-nightly-debuginfo]
-          name=Docker CE Nightly - Debuginfo $basearch
-          baseurl=https://download.docker.com/linux/centos/7/debug-$basearch/nightly
+          name=Docker CE Nightly - Debuginfo \$basearch
+          baseurl=https://download.docker.com/linux/centos/7/debug-\$basearch/nightly
           enabled=0
           gpgcheck=1
           gpgkey=https://download.docker.com/linux/centos/gpg

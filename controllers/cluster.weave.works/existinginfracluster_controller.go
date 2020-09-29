@@ -52,9 +52,9 @@ import (
 )
 
 const (
-	LocalController = "wks.weave.works/local-controller"
-	Created         = "wks.weave.works/is-created"
-	PoolSecretName  = "ip-pool"
+	LocalCluster   = "wks.weave.works/local-cluster"
+	Created        = "wks.weave.works/is-created"
+	PoolSecretName = "ip-pool"
 )
 
 // ExistingInfraClusterReconciler reconciles a ExistingInfraCluster object
@@ -176,7 +176,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	if err != nil {
 		return err
 	}
-	if err := r.setEICAnnotation(ctx, eic, LocalController, "true"); err != nil {
+	if err := r.setEICAnnotation(ctx, eic, LocalCluster, "true"); err != nil {
 		return err
 	}
 	machines, eims, err := r.createMachines(machineInfo, int(controlPlaneCount), eic.Spec.KubernetesVersion, eic.Namespace, eic.Name)
@@ -298,6 +298,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrap(err, "failed to extract configuration")
 	}
 	eic = &cleanEic
+	eic.Annotations[LocalCluster] = "true"
 	clusterManifest, err := marshal(cluster, eic)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal cluster manifests")
