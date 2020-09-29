@@ -20,15 +20,6 @@ workflows:
             tags:
               only: /.*/
       - unit-tests: {}
-      - release:
-          requires:
-            - build
-            - unit-tests
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /.*/
 
 jobs:
   build:
@@ -67,9 +58,3 @@ jobs:
           command: |
             go version
             make test
-
-  release:
-    <<: *defaults
-    steps:
-      - checkout
-      - run: curl -sL https://git.io/goreleaser | IMAGE_TAG=`tools/image-tag` bash
