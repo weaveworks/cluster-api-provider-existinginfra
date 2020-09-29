@@ -56,5 +56,5 @@ replace (
 	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.18.6
 	k8s.io/metrics => k8s.io/metrics v0.18.6
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.18.6
-	sigs.k8s.io/controller-runtime => github.com/bboreham/controller-runtime tracing
+	sigs.k8s.io/controller-runtime => github.com/bboreham/controller-runtime v0.6.4-0.20201021142033-b7613e6bd7ff
 )
