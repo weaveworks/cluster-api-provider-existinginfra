@@ -77,6 +77,9 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	// Get the controller's namespace via downward API
+	namespace := os.Getenv("POD_NAMESPACE")
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
@@ -119,7 +122,7 @@ func main() {
 		ClientSet:     clientSet,
 		// TODO: The ControllerNamespace is originally obtained from some machines in wksctl,
 		//  which is not portable for CAPEI. That needs to be changed as well.
-		ControllerNamespace: defaultNamespace,
+		ControllerNamespace: namespace,
 		Verbose:             verbose,
 	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraMachine")

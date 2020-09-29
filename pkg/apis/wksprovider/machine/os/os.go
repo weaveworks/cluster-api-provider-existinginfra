@@ -29,6 +29,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
 	"github.com/weaveworks/libgitops/pkg/serializer"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/api/apps/v1beta2"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
@@ -339,7 +340,42 @@ func capiControllerManifest(controller ControllerParams, namespace, configDir st
 }
 
 func wksControllerManifest(controller ControllerParams, namespace, configDir string) ([]byte, error) {
-	return manifest.WithNamespace(serializer.FromBytes([]byte(wksControllerManifestString)), namespace)
+	content, err := manifest.WithNamespace(serializer.FromBytes([]byte(wksControllerManifestString)), namespace)
+	if err != nil {
+		return nil, err
+	}
+	return updateControllerImage(content, controller.ImageOverride)
+}
+
+const deployment = "Deployment"
+
+// updateControllerImage replaces the controller image in the manifest and
+// returns the updated manifest
+func updateControllerImage(manifest []byte, controllerImageOverride string) ([]byte, error) {
+	if controllerImageOverride == "" {
+		return manifest, nil
+	}
+	d := &v1beta2.Deployment{}
+	if err := yaml.Unmarshal(manifest, d); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal WKS controller's manifest")
+	}
+	if d.Kind != deployment {
+		return nil, fmt.Errorf("invalid kind for WKS controller's manifest: expected %q but got %q", deployment, d.Kind)
+	}
+	var updatedController bool
+	for i := 0; i < len(d.Spec.Template.Spec.Containers); i++ {
+		if d.Spec.Template.Spec.Containers[i].Name == "controller" {
+			d.Spec.Template.Spec.Containers[i].Image = controllerImageOverride
+			env := d.Spec.Template.Spec.Containers[i].Env
+			env = append(env, v1.EnvVar{Name: "EXISTINGINFRA_CONTROLLER_IMAGE", Value: controllerImageOverride})
+			d.Spec.Template.Spec.Containers[i].Env = env
+			updatedController = true
+		}
+	}
+	if !updatedController {
+		return nil, errors.New("failed to update WKS controller's manifest: container not found")
+	}
+	return yaml.Marshal(d)
 }
 
 func getCluster() (eic *existinginfrav1.ExistingInfraCluster, err error) {
@@ -873,7 +909,15 @@ spec:
         operator: Exists
       containers:
       - name: controller
-        image: weaveworks/cluster-api-existinginfra-controller:v0.0.2
+        imagePullPolicy: Always
+        image: weaveworks/cluster-api-existinginfra-controller:v0.0.6"
+        env:
+        - name: EXISTINGINFRA_CONTROLLER_IMAGE
+          value: weaveworks/cluster-api-existinginfra-controller:v0.0.6"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         args:
         - --verbose
         resources:

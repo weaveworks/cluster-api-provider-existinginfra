@@ -1137,6 +1137,10 @@ spec:
         env:
         - name: EXISTINGINFRA_CONTROLLER_IMAGE
           value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"weaveworks/cluster-api-existinginfra-controller:v0.0.6"}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         args:
         - --verbose
         resources:
