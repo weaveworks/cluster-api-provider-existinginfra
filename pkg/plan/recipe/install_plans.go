@@ -67,12 +67,6 @@ func BuildConfigPlan(files []*resource.File) plan.Resource {
 func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime, cfg *envcfg.EnvSpecificConfig, pkgType resource.PkgType) plan.Resource {
 	b := plan.NewBuilder()
 
-	// Docker Repo
-	switch pkgType {
-	case resource.PkgTypeDeb:
-		// TODO(michal): Use the official docker.com repo
-	}
-
 	if criSpec.Kind != "docker" {
 		log.Fatalf("Unknown CRI - %s", criSpec.Kind)
 	}

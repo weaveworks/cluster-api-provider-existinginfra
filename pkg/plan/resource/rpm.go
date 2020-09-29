@@ -88,7 +88,7 @@ func (p *RPM) QueryState(ctx context.Context, r plan.Runner) (plan.State, error)
 	}
 	if err != nil {
 		// An error happened running rpm.
-		return plan.EmptyState, fmt.Errorf("Query rpm %s failed: %v -- %s", p.label(), err, output)
+		return plan.EmptyState, fmt.Errorf("query rpm %s failed: %v -- %s", p.label(), err, output)
 	}
 
 	// XXX: in theory rpm queries can return multiple versions of the same package
@@ -131,11 +131,12 @@ func (p *RPM) Apply(ctx context.Context, r plan.Runner, diff plan.Diff) (bool, e
 
 	// First assume the package doesn't exist at all
 	var cmd string
-	if diff.CurrentState.IsEmpty() {
+	switch {
+	case diff.CurrentState.IsEmpty():
 		cmd = fmt.Sprintf("yum -y install %s", p.label())
-	} else if lowerRevisionThan(diff.CurrentState, p.State()) {
+	case lowerRevisionThan(diff.CurrentState, p.State()):
 		cmd = fmt.Sprintf("yum -y upgrade-to %s", p.label())
-	} else if lowerRevisionThan(p.State(), diff.CurrentState) {
+	case lowerRevisionThan(p.State(), diff.CurrentState):
 		cmd = fmt.Sprintf("yum -y remove %s && yum -y install %s", p.Name, p.label())
 	}
 

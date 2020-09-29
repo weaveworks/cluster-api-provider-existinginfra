@@ -488,33 +488,32 @@ func displayableResourceData(typeName string, stateData interface{}) State {
 	// Plans are just translated recursively
 	if typeName == planTypeName {
 		return displayableState(State(stateData.(map[string]interface{})))
-	} else {
-		// populate a map by scanning through the resource fields and skipping
-		// hidden ones
-		rtype := resourceTypeByName(typeName)
-		rmap := map[string]interface{}{}
-		for i := 0; i < rtype.baseType.NumField(); i++ {
-			// ignore fields marked by the `plan:"hide"` tag
-			f := rtype.baseType.Field(i)
-			planTag := f.Tag.Get("plan")
-			if planTag == "hide" {
-				continue
-			}
-			key := f.Name
-			structsTag := f.Tag.Get("structs")
-			if structsTag != "" {
-				// find the actual name to use as the map key in the structs tag, if specified
-				tagItems := strings.Split(structsTag, ",")
-				key = tagItems[0]
-			}
-			// skip missing map entries since they were remove by "omitempty" struct tags
-			val, ok := stateData.(map[string]interface{})[key]
-			if ok {
-				rmap[key] = val
-			}
-		}
-		return State(rmap)
 	}
+	// populate a map by scanning through the resource fields and skipping
+	// hidden ones
+	rtype := resourceTypeByName(typeName)
+	rmap := map[string]interface{}{}
+	for i := 0; i < rtype.baseType.NumField(); i++ {
+		// ignore fields marked by the `plan:"hide"` tag
+		f := rtype.baseType.Field(i)
+		planTag := f.Tag.Get("plan")
+		if planTag == "hide" {
+			continue
+		}
+		key := f.Name
+		structsTag := f.Tag.Get("structs")
+		if structsTag != "" {
+			// find the actual name to use as the map key in the structs tag, if specified
+			tagItems := strings.Split(structsTag, ",")
+			key = tagItems[0]
+		}
+		// skip missing map entries since they were remove by "omitempty" struct tags
+		val, ok := stateData.(map[string]interface{})[key]
+		if ok {
+			rmap[key] = val
+		}
+	}
+	return State(rmap)
 }
 
 // Return the struct type defining the Resource and whether or not the
@@ -675,7 +674,7 @@ func (p *Plan) Undo(ctx context.Context, runner Runner, current State) error {
 		}
 	}
 	if len(errors) != 0 {
-		return fmt.Errorf("Partial undo completed due to the following errors:\n%s", formatNestedErrors(errors))
+		return fmt.Errorf("partial undo completed due to the following errors:\n%s", formatNestedErrors(errors))
 	}
 	return nil
 }
@@ -919,7 +918,7 @@ func (p *Plan) processResource(
 	if output.ValidityStatus != Valid {
 		logger.Error("Failing (Bad Upstream Resource)")
 		sendResults(output, conn)
-		return errors.New("Failing (Bad Upstream Resource)")
+		return errors.New("failing (bad upstream resource)")
 	}
 	// if all upstream resources are valid, see if the state of the current
 	// resource matches its desired state and, if not, re-apply the resource
@@ -960,9 +959,8 @@ func (p *Plan) processResource(
 			logger.Error("Failed")
 			fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 			return err
-		} else {
-			output.Updated = propagate
 		}
+		output.Updated = propagate
 	}
 	logger.Debug("Finished")
 	sendResults(output, conn)

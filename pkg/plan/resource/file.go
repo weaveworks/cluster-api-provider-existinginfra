@@ -46,7 +46,7 @@ func (f *File) QueryState(ctx context.Context, runner plan.Runner) (plan.State, 
 		return plan.EmptyState, nil
 	}
 	if err != nil {
-		return plan.EmptyState, fmt.Errorf("Query file %s failed: %v -- %s", f.Destination, err, output)
+		return plan.EmptyState, fmt.Errorf("query file %s failed: %v -- %s", f.Destination, err, output)
 	}
 	fields := strings.Fields(line(output))
 	state := f.State()
