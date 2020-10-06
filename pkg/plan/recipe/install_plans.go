@@ -367,3 +367,21 @@ func BuildKubeadmPrejoinPlan(kubernetesVersion string, useIPTables bool) plan.Re
 	}
 	return &p
 }
+
+//BuildSealedSecretPlan creates a sub-plan to install sealed secrets so we can check secrets into GitHub for GitOps
+func BuildSealedSecretPlan(sealedSecretVersion, ns string, crdManifest, keyManifest, controllerManifest []byte) plan.Resource {
+	b := plan.NewBuilder()
+	b.AddResource("install:sealed-secret-crd",
+		&resource.KubectlApply{Manifest: crdManifest, Filename: object.String("SealedSecretCRD.yaml"),
+			WaitCondition: "condition=Established"})
+
+	b.AddResource("install:sealed-secrets-key", &resource.KubectlApply{Manifest: keyManifest})
+	b.AddResource("install:sealed-secrets-controller",
+		&resource.KubectlApply{Manifest: controllerManifest, Filename: object.String("SealedSecretController.yaml")},
+		plan.DependOn("install:sealed-secrets-key"))
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return &p
+}
