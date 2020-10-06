@@ -4,8 +4,8 @@
 resources:
 - bases/cluster.weave.works_existinginfraclusters.yaml
 - bases/cluster.weave.works_existinginframachines.yaml
-- bases/baremetalproviderspec_clusterspecs.yaml
-- bases/baremetalproviderspec_machinespecs.yaml
+# - bases/baremetalproviderspec_clusterspecs.yaml
+# - bases/baremetalproviderspec_machinespecs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
