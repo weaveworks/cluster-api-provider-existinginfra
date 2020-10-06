@@ -12,8 +12,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	// "text/template"
 
+	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
+	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -23,6 +24,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/scheme"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
@@ -33,6 +35,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/util/keyutil"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	"sigs.k8s.io/yaml"
 )
@@ -73,45 +78,9 @@ type OS struct {
 	PkgType resource.PkgType
 }
 
-type CRDFile struct {
-	Fname string
-	Data  []byte
-}
-
-// Retrieve all CRD definitions needed for cluster API
-func GetCRDs(fs http.FileSystem) ([]CRDFile, error) {
-	log.Info("Getting CRDs")
-	crddir, err := fs.Open(".")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to list cluster API CRDs")
-	}
-	log.Info("Opened CRDs")
-	crdFiles := make([]CRDFile, 0)
-	for {
-		entry, err := crddir.Readdir(1)
-		if err != nil && err != io.EOF {
-			return nil, errors.Wrap(err, "failed to open cluster API CRD directory")
-		}
-		if entry == nil {
-			break
-		}
-		if entry[0].IsDir() || !strings.HasPrefix(entry[0].Name(), "cluster") {
-			continue
-		}
-		fname := entry[0].Name()
-		crd, err := fs.Open(fname)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to open cluster API CRD")
-		}
-		data, err := ioutil.ReadAll(crd)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to read cluster API CRD")
-		}
-		crdFiles = append(crdFiles, CRDFile{fname, data})
-	}
-	log.Info("Got CRDs")
-	return crdFiles, nil
-}
+var (
+	pemKeys = []string{"certificate-authority", "client-certificate", "client-key"}
+)
 
 type CRDFile struct {
 	Fname string
@@ -322,7 +291,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 			AdditionalSANs:        params.AdditionalSANs,
 			Namespace:             object.String(params.Namespace),
 			NodeName:              cfg.HostnameOverride,
-			ExtraAPIServerArgs:    map[string]string{},
+			ExtraAPIServerArgs:    apiServerArgs,
 			// kubeadm currently accepts a single subnet for services and pods
 			// ref: https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1#Networking
 			// this should be ensured in the validation step in pkg.specs.validation.validateCIDRBlocks()
@@ -392,8 +361,6 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	log.Info("Got config map plan")
 
 	b.AddResource("install:configmaps", configMapPlan, plan.DependOn(configDeps[0], configDeps[1:]...))
-
-	applyClstrRsc := &resource.KubectlApply{Manifest: []byte(params.ClusterManifest), Namespace: object.String(params.Namespace)}
 
 	applyClstrRsc := &resource.KubectlApply{Manifest: []byte(params.ClusterManifest), Namespace: object.String(params.Namespace), Filename: object.String("clustermanifest")}
 	b.AddResource("kubectl:apply:cluster", applyClstrRsc, plan.DependOn("install:configmaps", kubectlApplyDeps...))
@@ -538,10 +505,6 @@ func sealedSecretCRDManifest(namespace string) ([]byte, error) {
 
 func sealedSecretControllerManifest(namespace string) ([]byte, error) {
 	return getManifest(sealedSecretControllerManifestString, namespace)
-}
-
-func fluxManifest(namespace string) ([]byte, error) {
-	return getManifest(fluxManifestString, namespace)
 }
 
 func getManifest(manifestString, namespace string) ([]byte, error) {

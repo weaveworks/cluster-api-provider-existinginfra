@@ -19,6 +19,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	capeimanifest "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/ssh"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	"github.com/weaveworks/libgitops/pkg/serializer"
 	corev1 "k8s.io/api/core/v1"
