@@ -90,7 +90,7 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	if _, found := eic.Annotations[LocalController]; !found {
+	if _, found := eic.Annotations[LocalCluster]; !found {
 		if _, found = eic.Annotations[Created]; !found {
 			contextLog.Info("About to set up new cluster")
 			if err := r.setupInitialWorkloadCluster(ctx, eic); err != nil {
@@ -519,7 +519,7 @@ func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion,
 
 	log.Infof("Machine: %v", machine)
 
-	log.Infof("Creating existinginfra machine for: %v", *minfo)
+	log.Infof("Creating existinginfra machine")
 
 	eim.TypeMeta.APIVersion = "cluster.weave.works/v1alpha3"
 	eim.TypeMeta.Kind = "ExistingInfraMachine"
@@ -536,8 +536,6 @@ func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion,
 	}
 	publicEndpoint.Port = publicPort
 
-	log.Infof("Finished public address for: %v", *minfo)
-
 	privateEndpoint := &eim.Spec.Private
 	privateAddress := minfo.PrivateIP
 	privateEndpoint.Address = privateAddress
@@ -546,8 +544,6 @@ func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion,
 		return nil, nil, err
 	}
 	privateEndpoint.Port = privatePort
-
-	log.Infof("Finished private address for: %v", *minfo)
 
 	return &machine, &eim, nil
 }
