@@ -90,17 +90,12 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-<<<<<<< HEAD
 	if eic.Spec.WorkloadCluster {
 		created, err := r.machinesCreated(ctx, eic)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if !created {
-=======
-	if _, found := eic.Annotations[LocalController]; !found {
-		if _, found = eic.Annotations[Created]; !found {
->>>>>>> 46ab80f... cleanup
 			contextLog.Info("About to set up new cluster")
 			if err := r.setupInitialWorkloadCluster(ctx, eic); err != nil {
 				contextLog.Infof("Failed to set up new cluster: %v", err)
@@ -231,21 +226,7 @@ func (r *ExistingInfraClusterReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 	return r.newBuilderWithMgr(mgr).WithOptions(options).Complete(r)
 }
 
-<<<<<<< HEAD
 func (r *ExistingInfraClusterReconciler) modifyEIC(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
-=======
-func (a *ExistingInfraClusterReconciler) setEICAnnotation(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, key, value string) error {
-	err := a.modifyCluster(ctx, eic, func(cluster *clusterweaveworksv1alpha3.ExistingInfraCluster) {
-		cluster.Annotations[key] = value
-	})
-	if err != nil {
-		return gerrors.Wrapf(err, "Failed to set annotation: %s for cluster: %s", key, eic.Name)
-	}
-	return nil
-}
-
-func (r *ExistingInfraClusterReconciler) modifyCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
->>>>>>> 46ab80f... cleanup
 	contextLog := log.WithFields(log.Fields{"cluster": eic.Name})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result clusterweaveworksv1alpha3.ExistingInfraCluster
@@ -374,18 +355,12 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrapf(err, "failed to set up seed node (%s)", sp.GetMasterPublicAddress())
 	}
 
-<<<<<<< HEAD
 	err = r.modifyEIC(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
 		eic.Status.Ready = true
 	})
 	if err != nil {
 		return gerrors.Wrap(err, "Failed to set node status to Ready")
 	}
-=======
-	r.modifyCluster(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
-		eic.Status.Ready = true
-	})
->>>>>>> 46ab80f... cleanup
 
 	log.Infof("Finished setting up seed node: %s", sp.GetMasterPublicAddress())
 	return nil
