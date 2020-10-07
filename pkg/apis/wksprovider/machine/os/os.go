@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 
 	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
 	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
@@ -538,6 +539,10 @@ func sealedSecretCRDManifest(namespace string) ([]byte, error) {
 
 func sealedSecretControllerManifest(namespace string) ([]byte, error) {
 	return getManifest(sealedSecretControllerManifestString, namespace)
+}
+
+func fluxManifest(namespace string) ([]byte, error) {
+	return getManifest(fluxManifestString, namespace)
 }
 
 func getManifest(manifestString, namespace string) ([]byte, error) {
@@ -1571,6 +1576,155 @@ items:
           - --git-branch={{ .GitBranch }}
           - --git-poll-interval=30s
           - --git-path={{ .GitPath }}
+          - --git-readonly
+          - --memcached-hostname=memcached.weavek8sops.svc.cluster.local
+          - --memcached-service=memcached
+          - --listen-metrics=:3031
+          - --sync-garbage-collection
+          - --manifest-generation=false
+          image: fluxcd/flux:1.14.2
+          imagePullPolicy: IfNotPresent
+          name: flux
+          ports:
+          - containerPort: 3030
+          volumeMounts:
+          - mountPath: /etc/fluxd/ssh
+            name: git-key
+            readOnly: true
+          - mountPath: /var/fluxd/keygen
+            name: git-keygen
+        serviceAccount: flux
+        tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+        volumes:
+        - name: git-key
+          secret:
+            defaultMode: 256
+            secretName: flux-git-deploy
+        - emptyDir:
+            medium: Memory
+          name: git-keygen
+kind: List
+metadata: {}
+`
+
+const fluxManifestString = `
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    labels:
+      name: flux
+    name: flux
+    namespace: weavek8sops
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: ClusterRole
+  metadata:
+    labels:
+      name: flux
+    name: flux
+    namespace: weavek8sops
+  rules:
+  - apiGroups:
+    - '*'
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - nonResourceURLs:
+    - '*'
+    verbs:
+    - '*'
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: ClusterRoleBinding
+  metadata:
+    labels:
+      name: flux
+    name: flux
+    namespace: weavek8sops
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: flux
+  subjects:
+  - kind: ServiceAccount
+    name: flux
+    namespace: weavek8sops
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: memcached
+    namespace: weavek8sops
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: memcached
+    template:
+      metadata:
+        labels:
+          name: memcached
+      spec:
+        containers:
+        - args:
+          - -m 64
+          - -p 11211
+          image: memcached:1.4.25
+          imagePullPolicy: IfNotPresent
+          name: memcached
+          ports:
+          - containerPort: 11211
+            name: clients
+        tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: memcached
+    namespace: weavek8sops
+  spec:
+    clusterIP: None
+    ports:
+    - name: memcached
+      port: 11211
+      targetPort: 11211
+    selector:
+      name: memcached
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: flux
+    namespace: weavek8sops
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: flux
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        annotations:
+          prometheus.io.port: "3031"
+        labels:
+          name: flux
+      spec:
+        containers:
+        - args:
+          - --ssh-keygen-dir=/var/fluxd/keygen
+          - --git-url=git@github.com:weaveworks/wk-quickstart.git
+          - --git-branch=make-TRACK-switchable
+          - --git-poll-interval=30s
+          - --git-path=setup
           - --git-readonly
           - --memcached-hostname=memcached.weavek8sops.svc.cluster.local
           - --memcached-service=memcached
