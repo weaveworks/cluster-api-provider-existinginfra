@@ -1,6 +1,7 @@
 package os
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"encoding/base64"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 
 	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
 	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
@@ -359,6 +361,10 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	ctlrRsc := &resource.KubectlApply{Manifest: wksCtlrManifest, Filename: object.String("wks_controller.yaml")}
 	b.AddResource("install:wks", ctlrRsc, plan.DependOn("kubectl:apply:cluster", dep))
 
+	if err := configureFlux(b, params); err != nil {
+		return nil, errors.Wrap(err, "Failed to configure flux")
+	}
+
 	return CreatePlan(b)
 }
 
@@ -461,6 +467,10 @@ func sealedSecretCRDManifest(namespace string) ([]byte, error) {
 
 func sealedSecretControllerManifest(namespace string) ([]byte, error) {
 	return getManifest(sealedSecretControllerManifestString, namespace)
+}
+
+func fluxManifest(namespace string) ([]byte, error) {
+	return getManifest(fluxManifestString, namespace)
 }
 
 func getManifest(manifestString, namespace string) ([]byte, error) {
@@ -1111,45 +1121,53 @@ func readAndBase64EncodeKey(keypath string) (string, error) {
 	return base64.StdEncoding.EncodeToString(content), nil
 }
 
-// func configureFlux(b *plan.Builder, params SeedNodeParams) error {
-//  gitData := params.GitData
-//  if gitData.GitURL == "" {
-//      return nil
-//  }
-//  fluxManifestPath, err := findFluxManifest(params.ConfigDirectory)
-//  if err != nil {
-//      // We haven't found a flux.yaml manifest in the git repository, use the flux addon.
-//      gitParams := map[string]string{"gitURL": gitData.GitURL, "gitBranch": gitData.GitBranch, "gitPath": gitData.GitPath}
-//      err := processDeployKey(gitParams, gitData.GitDeployKeyPath)
-//      if err != nil {
-//          return errors.Wrap(err, "failed to process the git deploy key")
-//      }
-//      fluxAddon := existinginfrav1.Addon{Name: "flux", Params: gitParams}
-//      manifests, err := buildAddon(fluxAddon, params.ImageRepository, params.ClusterManifestPath, params.GetAddonNamespace("flux"))
-//      if err != nil {
-//          return errors.Wrap(err, "failed to generate manifests for flux")
-//      }
-//      for i, m := range manifests {
-//          resName := fmt.Sprintf("%s-%02d", "flux", i)
-//          fluxRsc := &resource.KubectlApply{Manifest: m, Filename: object.String(resName + ".yaml")}
-//          b.AddResource("install:flux:"+resName, fluxRsc, plan.DependOn("kubectl:apply:cluster", "kubectl:apply:machines"))
-//      }
-//      return nil
-//  }
+func configureFlux(b *plan.Builder, params SeedNodeParams) error {
+	gitData := params.GitData
+	if gitData.GitURL == "" {
+		return nil
+	}
+	fluxManifest, err := fluxManifest(params.Namespace)
+	if err != nil {
+		return err
+	}
 
-//  // Use flux.yaml from the git repository.
-//  manifest, err := createFluxSecretFromGitData(gitData, params)
-//  if err != nil {
-//      return errors.Wrap(err, "failed to generate git deploy secret manifest for flux")
-//  }
-//  secretResName := "flux-git-deploy-secret"
-//  fluxSecretRsc := &resource.KubectlApply{OpaqueManifest: manifest, Filename: object.String(secretResName + ".yaml")}
-//  b.AddResource("install:flux:"+secretResName, fluxSecretRsc, plan.DependOn("kubectl:apply:cluster", "kubectl:apply:machines"))
+	manifest, err := createFluxSecretFromGitData(gitData, params)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate git deploy secret manifest for flux")
+	}
+	secretResName := "flux-git-deploy-secret"
+	fluxSecretRsc := &resource.KubectlApply{OpaqueManifest: manifest, Filename: object.String(secretResName + ".yaml")}
+	b.AddResource("install:flux:"+secretResName, fluxSecretRsc, plan.DependOn("kubectl:apply:cluster", "kubectl:apply:machines"))
 
-//  fluxRsc := &resource.KubectlApply{ManifestPath: object.String(fluxManifestPath)}
-//  b.AddResource("install:flux:main", fluxRsc, plan.DependOn("install:flux:flux-git-deploy-secret"))
-//  return nil
-// }
+	fluxRsc := &resource.KubectlApply{Manifest: fluxManifest, Filename: object.String("flux.yaml")}
+	b.AddResource("install:flux:main", fluxRsc, plan.DependOn("install:flux:flux-git-deploy-secret"))
+	return nil
+}
+
+func createFluxSecretFromGitData(gitData GitParams, params SeedNodeParams) ([]byte, error) {
+	gitParams := map[string]string{"namespace": params.Namespace}
+	err := processDeployKey(gitParams, gitData.GitDeployKeyPath)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to process the git deploy key")
+	}
+	return replaceGitFields(fluxSecretTemplate, gitParams)
+}
+
+func replaceGitFields(templateBody string, gitParams map[string]string) ([]byte, error) {
+	t, err := template.New("flux-secret").Parse(templateBody)
+	if err != nil {
+		return nil, err
+	}
+	var populated bytes.Buffer
+	err = t.Execute(&populated, struct {
+		Namespace   string
+		SecretValue string
+	}{gitParams["namespace"], gitParams["gitDeployKey"]})
+	if err != nil {
+		return nil, err
+	}
+	return populated.Bytes(), nil
+}
 
 func createConfigFileResourcesFromClusterSpec(providerSpec *existinginfrav1.ClusterSpec, ns string) (map[string][]byte, map[string]*v1.ConfigMap, []*resource.File, error) {
 	log.Info("Extracting config files")
@@ -1539,4 +1557,153 @@ rules:
   verbs:
   - create
   - get
+`
+
+const fluxManifestString = `
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    labels:
+      name: flux
+    name: flux
+    namespace: weavek8sops
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: ClusterRole
+  metadata:
+    labels:
+      name: flux
+    name: flux
+    namespace: weavek8sops
+  rules:
+  - apiGroups:
+    - '*'
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - nonResourceURLs:
+    - '*'
+    verbs:
+    - '*'
+- apiVersion: rbac.authorization.k8s.io/v1beta1
+  kind: ClusterRoleBinding
+  metadata:
+    labels:
+      name: flux
+    name: flux
+    namespace: weavek8sops
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: flux
+  subjects:
+  - kind: ServiceAccount
+    name: flux
+    namespace: weavek8sops
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: memcached
+    namespace: weavek8sops
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: memcached
+    template:
+      metadata:
+        labels:
+          name: memcached
+      spec:
+        containers:
+        - args:
+          - -m 64
+          - -p 11211
+          image: memcached:1.4.25
+          imagePullPolicy: IfNotPresent
+          name: memcached
+          ports:
+          - containerPort: 11211
+            name: clients
+        tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: memcached
+    namespace: weavek8sops
+  spec:
+    clusterIP: None
+    ports:
+    - name: memcached
+      port: 11211
+      targetPort: 11211
+    selector:
+      name: memcached
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: flux
+    namespace: weavek8sops
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: flux
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        annotations:
+          prometheus.io.port: "3031"
+        labels:
+          name: flux
+      spec:
+        containers:
+        - args:
+          - --ssh-keygen-dir=/var/fluxd/keygen
+          - --git-url=git@github.com:weaveworks/wk-quickstart.git
+          - --git-branch=make-TRACK-switchable
+          - --git-poll-interval=30s
+          - --git-path=setup
+          - --git-readonly
+          - --memcached-hostname=memcached.weavek8sops.svc.cluster.local
+          - --memcached-service=memcached
+          - --listen-metrics=:3031
+          - --sync-garbage-collection
+          - --manifest-generation=false
+          image: fluxcd/flux:1.14.2
+          imagePullPolicy: IfNotPresent
+          name: flux
+          ports:
+          - containerPort: 3030
+          volumeMounts:
+          - mountPath: /etc/fluxd/ssh
+            name: git-key
+            readOnly: true
+          - mountPath: /var/fluxd/keygen
+            name: git-keygen
+        serviceAccount: flux
+        tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+        volumes:
+        - name: git-key
+          secret:
+            defaultMode: 256
+            secretName: flux-git-deploy
+        - emptyDir:
+            medium: Memory
+          name: git-keygen
+kind: List
+metadata: {}
 `
