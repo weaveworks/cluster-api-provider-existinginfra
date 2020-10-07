@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 
 	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
 	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
@@ -505,6 +506,10 @@ func sealedSecretCRDManifest(namespace string) ([]byte, error) {
 
 func sealedSecretControllerManifest(namespace string) ([]byte, error) {
 	return getManifest(sealedSecretControllerManifestString, namespace)
+}
+
+func fluxManifest(namespace string) ([]byte, error) {
+	return getManifest(fluxManifestString, namespace)
 }
 
 func getManifest(manifestString, namespace string) ([]byte, error) {
