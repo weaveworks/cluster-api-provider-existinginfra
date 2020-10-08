@@ -20,15 +20,6 @@ workflows:
             tags:
               only: /.*/
       - unit-tests: {}
-      - release:
-          requires:
-            - build
-            - unit-tests
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /.*/
 
 jobs:
   build:
@@ -55,21 +46,7 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install kubectl
-          command: |
-            curl -L $KUBECTL_URL -o kubectl.tar.gz
-            echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
-            tar xvzf kubectl.tar.gz --strip-components=3
-            sudo mv kubectl /usr/local/bin
-
-      - run:
           name: Run unit tests
           command: |
             go version
             make test
-
-  release:
-    <<: *defaults
-    steps:
-      - checkout
-      - run: curl -sL https://git.io/goreleaser | IMAGE_TAG=`tools/image-tag` bash
