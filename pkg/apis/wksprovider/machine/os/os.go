@@ -2,7 +2,6 @@ package os
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -13,8 +12,6 @@ import (
 	"strings"
 	"text/template"
 
-	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
-	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -24,7 +21,6 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
-	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/scheme"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
@@ -34,14 +30,13 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/client-go/util/keyutil"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	"sigs.k8s.io/yaml"
 )
 
 const (
+	LocalCluster              = "wks.weave.works/local-cluster"
+	Created                   = "wks.weave.works/is-created"
 	PemDestDir                = "/etc/pki/weaveworks/wksctl/pem"
 	ConfigDestDir             = "/etc/pki/weaveworks/wksctl"
 	sealedSecretVersion       = "v0.11.0"
@@ -120,7 +115,7 @@ type GitParams struct {
 
 // AuthParams are parameters used to configure authn and authz for the cluster
 type AuthParams struct {
-	PEMSecretResources map[string]*secretResourceSpec
+	PEMSecretResources map[string]*SecretResourceSpec
 	AuthConfigMap      *v1.ConfigMap
 	AuthConfigManifest []byte
 }
@@ -153,8 +148,8 @@ type SeedNodeParams struct {
 	Controller           ControllerParams
 	GitData              GitParams
 	AuthInfo             *AuthParams
-	SealedSecretKeyPath  string
-	SealedSecretCertPath string
+	SealedSecretKey      string
+	SealedSecretCert     string
 	ConfigDirectory      string
 	Namespace            string
 	ImageRepository      string
@@ -206,7 +201,6 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	cluster := params.ExistingInfraCluster
 	log.Infof("Got cluster")
 
-	//	kubernetesVersion, kubernetesNamespace, err := machine.GetKubernetesVersionFromManifest(params.MachinesManifest)
 	kubernetesVersion := getKubernetesVersion(&cluster)
 	log.Info("Got Kubernetes version")
 
@@ -311,7 +305,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	// If we're pulling data out of GitHub, we install sealed secrets and any auth secrets stored in sealed secrets
 	configDeps := kubectlApplyDeps
 	if params.AuthInfo != nil {
-		configDeps, err = addSealedSecretResourcesIfNecessary(b, kubectlApplyDeps, params.AuthInfo.PEMSecretResources, sealedSecretVersion, params.SealedSecretKeyPath, params.SealedSecretCertPath, params.Namespace)
+		configDeps, err = addSealedSecretResourcesIfNecessary(b, kubectlApplyDeps, params.AuthInfo.PEMSecretResources, sealedSecretVersion, params.SealedSecretKey, params.SealedSecretCert, params.Namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -343,7 +337,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	mManRsc := &resource.KubectlApply{Manifest: []byte(params.MachinesManifest), Filename: object.String("machinesmanifest"), Namespace: object.String(params.Namespace)}
 	b.AddResource("kubectl:apply:machines", mManRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
 
-	dep := addSealedSecretWaitIfNecessary(b, params.SealedSecretKeyPath, params.SealedSecretCertPath)
+	dep := addSealedSecretWaitIfNecessary(b, params.SealedSecretKey, params.SealedSecretCert)
 	{
 		capiCtlrManifest, err := capiControllerManifest(params.Controller, params.Namespace)
 		if err != nil {
@@ -368,6 +362,58 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	return CreatePlan(b)
 }
 
+func addSealedSecretWaitIfNecessary(b *plan.Builder, key, cert string) string {
+	if key != "" && cert != "" {
+		b.AddResource("wait:sealed-secrets-controller",
+			&resource.KubectlWait{WaitNamespace: "kube-system", WaitType: "pods", WaitSelector: "name=sealed-secrets-controller",
+				WaitCondition: "condition=Ready", WaitTimeout: "300s"},
+			plan.DependOn("kubectl:apply:machines"))
+		return "wait:sealed-secrets-controller"
+	}
+	return "kubectl:apply:machines"
+}
+
+func addSealedSecretResourcesIfNecessary(b *plan.Builder, kubectlApplyDeps []string, pemSecretResources map[string]*SecretResourceSpec, sealedSecretVersion, key, cert, ns string) ([]string, error) {
+	if key != "" && cert != "" {
+		keyManifest, err := createSealedSecretKeySecretManifest(key, cert, ns)
+		if err != nil {
+			return nil, err
+		}
+		crdManifest, err := sealedSecretCRDManifest(ns)
+		if err != nil {
+			return nil, err
+		}
+		controllerManifest, err := sealedSecretControllerManifest(ns)
+		if err != nil {
+			return nil, err
+		}
+
+		sealedSecretRsc := recipe.BuildSealedSecretPlan(sealedSecretVersion, ns, crdManifest,
+			keyManifest, controllerManifest)
+		b.AddResource("install:sealed-secrets", sealedSecretRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
+
+		// Now that the cluster is up, if auth is configured, create a secret containing the data for use by the machine actuator
+		for _, resourceSpec := range pemSecretResources {
+			b.AddResource(fmt.Sprintf("install:pem-secret-%s", resourceSpec.SecretName), resourceSpec.Resource, plan.DependOn("install:sealed-secrets"))
+		}
+		return []string{"install:sealed-secrets"}, nil
+	}
+	return kubectlApplyDeps, nil
+}
+
+func createSealedSecretKeySecretManifest(privateKey, cert, ns string) ([]byte, error) {
+	secret := &v1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: sealedSecretKeySecretName, Namespace: "kube-system"},
+		Type:       v1.SecretTypeOpaque,
+	}
+	secret.Data = map[string][]byte{}
+	secret.StringData = map[string]string{}
+	secret.StringData[v1.TLSPrivateKeyKey] = privateKey
+	secret.StringData[v1.TLSCertKey] = cert
+	return yaml.Marshal(secret)
+}
+
 func ApplyPlan(o *OS, p *plan.Plan) error {
 	err := p.Undo(o.Runner, plan.EmptyState)
 	if err != nil {
@@ -381,66 +427,6 @@ func ApplyPlan(o *OS, p *plan.Plan) error {
 		return err
 	}
 	return err
-}
-
-func addSealedSecretWaitIfNecessary(b *plan.Builder, keyPath, certPath string) string {
-	if keyPath != "" && certPath != "" {
-		b.AddResource("wait:sealed-secrets-controller",
-			&resource.KubectlWait{WaitNamespace: "kube-system", WaitType: "pods", WaitSelector: "name=sealed-secrets-controller",
-				WaitCondition: "condition=Ready", WaitTimeout: "300s"},
-			plan.DependOn("kubectl:apply:machines"))
-		return "wait:sealed-secrets-controller"
-	}
-	return "kubectl:apply:machines"
-}
-
-func addSealedSecretResourcesIfNecessary(b *plan.Builder, kubectlApplyDeps []string, pemSecretResources map[string]*secretResourceSpec, sealedSecretVersion, keyPath, certPath, ns string) ([]string, error) {
-	if keyPath != "" && certPath != "" {
-		privateKeyBytes, err := getConfigFileContents(keyPath)
-		if err != nil {
-			return nil, errors.Wrap(err, "Could not read private key")
-		}
-		certBytes, err := getConfigFileContents(certPath)
-		if err != nil {
-			return nil, errors.Wrap(err, "Could not read cert")
-		}
-		keyManifest, err := createSealedSecretKeySecretManifest(string(privateKeyBytes), string(certBytes), ns)
-		if err != nil {
-			return nil, err
-		}
-		crdManifest, err := sealedSecretCRDManifest(ns)
-		if err != nil {
-			return nil, err
-		}
-		controllerManifest, err := sealedSecretControllerManifest(ns)
-		if err != nil {
-			return nil, err
-		}
-		sealedSecretRsc := recipe.BuildSealedSecretPlan(sealedSecretVersion, ns, crdManifest, keyManifest, controllerManifest)
-		b.AddResource("install:sealed-secrets", sealedSecretRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
-
-		// Now that the cluster is up, if auth is configured, create a secret containing the data for use by the machine actuator
-		for _, resourceSpec := range pemSecretResources {
-			b.AddResource(fmt.Sprintf("install:pem-secret-%s", resourceSpec.secretName), resourceSpec.resource, plan.DependOn("install:sealed-secrets"))
-		}
-		return []string{"install:sealed-secrets"}, nil
-	}
-	return kubectlApplyDeps, nil
-}
-
-func addAuthArgs(apiServerArgs map[string]string, pemSecretResources map[string]*secretResourceSpec, providerSpec *existinginfrav1.ClusterSpec) {
-	authnResourceSpec := pemSecretResources["authentication"]
-	if authnResourceSpec != nil {
-		storeIfNotEmpty(apiServerArgs, "authentication-token-webhook-config-file", filepath.Join(ConfigDestDir, authnResourceSpec.secretName+".yaml"))
-		storeIfNotEmpty(apiServerArgs, "authentication-token-webhook-cache-ttl", providerSpec.Authentication.CacheTTL)
-	}
-	authzResourceSpec := pemSecretResources["authorization"]
-	if authzResourceSpec != nil {
-		apiServerArgs["authorization-mode"] = "Webhook"
-		storeIfNotEmpty(apiServerArgs, "authorization-webhook-config-file", filepath.Join(ConfigDestDir, authzResourceSpec.secretName+".yaml"))
-		storeIfNotEmpty(apiServerArgs, "authorization-webhook-cache-unauthorized-ttl", providerSpec.Authorization.CacheUnauthorizedTTL)
-		storeIfNotEmpty(apiServerArgs, "authorization-webhook-cache-authorized-ttl", providerSpec.Authorization.CacheAuthorizedTTL)
-	}
 }
 
 func addAuthConfigMapIfNecessary(configMapManifests map[string][]byte, authConfigManifest []byte) {
@@ -506,10 +492,6 @@ func updateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 		return nil, errors.New("failed to update WKS controller's manifest: container not found")
 	}
 	return yaml.Marshal(d)
-}
-
-func getCluster() (eic *existinginfrav1.ExistingInfraCluster, err error) {
-	return nil, nil
 }
 
 func getKubernetesVersion(cluster *existinginfrav1.ExistingInfraCluster) string {
@@ -780,6 +762,21 @@ func addAuthConfigResources(b *plan.Builder, authConfigMap *v1.ConfigMap, secret
 	return nil
 }
 
+func addAuthArgs(apiServerArgs map[string]string, pemSecretResources map[string]*SecretResourceSpec, providerSpec *existinginfrav1.ClusterSpec) {
+	authnResourceSpec := pemSecretResources["authentication"]
+	if authnResourceSpec != nil {
+		StoreIfNotEmpty(apiServerArgs, "authentication-token-webhook-config-file", filepath.Join(ConfigDestDir, authnResourceSpec.SecretName+".yaml"))
+		StoreIfNotEmpty(apiServerArgs, "authentication-token-webhook-cache-ttl", providerSpec.Authentication.CacheTTL)
+	}
+	authzResourceSpec := pemSecretResources["authorization"]
+	if authzResourceSpec != nil {
+		apiServerArgs["authorization-mode"] = "Webhook"
+		StoreIfNotEmpty(apiServerArgs, "authorization-webhook-config-file", filepath.Join(ConfigDestDir, authzResourceSpec.SecretName+".yaml"))
+		StoreIfNotEmpty(apiServerArgs, "authorization-webhook-cache-unauthorized-ttl", providerSpec.Authorization.CacheUnauthorizedTTL)
+		StoreIfNotEmpty(apiServerArgs, "authorization-webhook-cache-authorized-ttl", providerSpec.Authorization.CacheAuthorizedTTL)
+	}
+}
+
 const (
 	CentOS = "centos"
 	Ubuntu = "ubuntu"
@@ -834,13 +831,13 @@ func CreatePlan(b *plan.Builder) (*plan.Plan, error) {
 	return &p, nil
 }
 
-type secretResourceSpec struct {
-	secretName string
-	decrypted  resource.SecretData
-	resource   plan.Resource
+type SecretResourceSpec struct {
+	SecretName string
+	Decrypted  resource.SecretData
+	Resource   plan.Resource
 }
 
-func storeIfNotEmpty(vals map[string]string, key, value string) {
+func StoreIfNotEmpty(vals map[string]string, key, value string) {
 	if value != "" {
 		vals[key] = value
 	}
@@ -887,217 +884,10 @@ func seedNodeSetupPlan(o *OS, params SeedNodeParams, providerSpec *existinginfra
 		nodeParams.AuthConfigMap = params.AuthInfo.AuthConfigMap
 		secrets := map[string]resource.SecretData{}
 		for k, v := range params.AuthInfo.PEMSecretResources {
-			secrets[k] = v.decrypted
+			secrets[k] = v.Decrypted
 		}
 	}
 	return o.CreateNodeSetupPlan(nodeParams)
-}
-
-// processPemFilesIfAny reads the SealedSecret from the config
-// directory, decrypts it using the GitHub deploy key, creates file
-// resources for .pem files stored in the secret, and creates a SealedSecret resource
-// for them that can be used by the machine actuator
-func processPemFilesIfAny(builder *plan.Builder, providerSpec *existinginfrav1.ClusterSpec, configDir string, ns, privateKeyPath, certPath string) (map[string]*secretResourceSpec, *v1.ConfigMap, []byte, error) {
-	if err := checkPemValues(providerSpec, privateKeyPath, certPath); err != nil {
-		return nil, nil, nil, err
-	}
-	if providerSpec.Authentication == nil && providerSpec.Authorization == nil {
-		// no auth specified
-		return nil, nil, nil, nil
-	}
-	b := plan.NewBuilder()
-	b.AddResource("create:pem-dir", &resource.Dir{Path: object.String(PemDestDir)})
-	b.AddResource("set-perms:pem-dir", &resource.Run{Script: object.String(fmt.Sprintf("chmod 600 %s", PemDestDir))}, plan.DependOn("create:pem-dir"))
-	privateKey, err := getPrivateKey(privateKeyPath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var authenticationSecretFileName, authorizationSecretFileName, authenticationSecretName, authorizationSecretName string
-	var authenticationSecretManifest, authorizationSecretManifest, authenticationConfig, authorizationConfig []byte
-	var decrypted map[string][]byte
-	secretResources := map[string]*secretResourceSpec{}
-	if providerSpec.Authentication != nil {
-		authenticationSecretFileName = providerSpec.Authentication.SecretFile
-		authenticationSecretManifest, decrypted, authenticationSecretName, authenticationConfig, err = processSecret(
-			b, privateKey, configDir, authenticationSecretFileName, providerSpec.Authentication.URL)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		secretResources["authentication"] = &secretResourceSpec{
-			secretName: authenticationSecretName,
-			decrypted:  decrypted,
-			resource:   &resource.KubectlApply{Namespace: object.String(ns), Manifest: authenticationSecretManifest, Filename: object.String(authenticationSecretName)}}
-	}
-	if providerSpec.Authorization != nil {
-		authorizationSecretFileName = providerSpec.Authorization.SecretFile
-		authorizationSecretManifest, decrypted, authorizationSecretName, authorizationConfig, err = processSecret(
-			b, privateKey, configDir, authorizationSecretFileName, providerSpec.Authorization.URL)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		secretResources["authorization"] = &secretResourceSpec{
-			secretName: authorizationSecretName,
-			decrypted:  decrypted,
-			resource:   &resource.KubectlApply{Namespace: object.String(ns), Manifest: authorizationSecretManifest, Filename: object.String(authorizationSecretName)}}
-	}
-	filePlan, err := b.Plan()
-	if err != nil {
-		log.Infof("Plan creation failed:\n%s\n", err)
-		return nil, nil, nil, err
-	}
-	builder.AddResource("install:pem-files", &filePlan, plan.DependOn("install:config"))
-	authConfigMap, authConfigMapManifest, err := createAuthConfigMapManifest(authenticationSecretName, authorizationSecretName,
-		authenticationConfig, authorizationConfig)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return secretResources, authConfigMap, authConfigMapManifest, nil
-}
-
-func getPrivateKey(privateKeyPath string) (*rsa.PrivateKey, error) {
-	privateKeyBytes, err := getConfigFileContents(privateKeyPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "Could not read private key")
-	}
-	privateKeyData, err := keyutil.ParsePrivateKeyPEM(privateKeyBytes)
-	if err != nil {
-		return nil, err
-	}
-	privateKey, ok := privateKeyData.(*rsa.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("Private key file %q did not contain valid private key", privateKeyPath)
-	}
-	return privateKey, nil
-}
-
-// getConfigFileContents reads a config manifest from a file in the config directory.
-func getConfigFileContents(fileNameComponent ...string) ([]byte, error) {
-	return ioutil.ReadFile(filepath.Join(fileNameComponent...))
-}
-
-func checkPemValues(providerSpec *existinginfrav1.ClusterSpec, privateKeyPath, certPath string) error {
-	if privateKeyPath == "" || certPath == "" {
-		if providerSpec.Authentication != nil || providerSpec.Authorization != nil {
-			return errors.New("Encryption keys not specified; cannot process authentication and authorization specifications.")
-		}
-	}
-	if (providerSpec.Authentication != nil && providerSpec.Authentication.SecretFile == "") ||
-		(providerSpec.Authorization != nil && providerSpec.Authorization.SecretFile == "") {
-		return errors.New("A secret must be specified to configure an authentication or authorization specification.")
-	}
-	return nil
-}
-
-func createAuthConfigMapManifest(authnSecretName, authzSecretName string, authnConfig, authzConfig []byte) (*v1.ConfigMap, []byte, error) {
-	data := map[string]string{}
-	storeIfNotEmpty(data, "authentication-secret-name", authnSecretName)
-	storeIfNotEmpty(data, "authorization-secret-name", authzSecretName)
-	storeIfNotEmpty(data, "authentication-config", string(authnConfig))
-	storeIfNotEmpty(data, "authorization-config", string(authzConfig))
-	cm := v1.ConfigMap{
-		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "auth-config"},
-		Data:       data,
-	}
-	manifest, err := yaml.Marshal(cm)
-	if err != nil {
-		return nil, nil, err
-	}
-	return &cm, manifest, nil
-}
-
-// Decrypts secret, adds plan resources to install files found inside, plus a kubeconfig file pointing to them.
-// returns the sealed file contents, decrypted contents, secret name, kubeconfig, error if any
-func processSecret(b *plan.Builder, key *rsa.PrivateKey, configDir, secretFileName, URL string) ([]byte, map[string][]byte, string, []byte, error) {
-	// Read the file contents at configDir/secretFileName
-	contents, err := getConfigFileContents(configDir, secretFileName)
-	if err != nil {
-		return nil, nil, "", nil, err
-	}
-
-	// Create a new YAML FrameReader from the given bytes
-	fr := serializer.NewYAMLFrameReader(serializer.FromBytes(contents))
-	// Create the secret to decode into
-	ss := &ssv1alpha1.SealedSecret{}
-	// Decode the Sealed Secret into the object
-	// In the future, if we wish to support other kinds of secrets than SealedSecrets, we
-	// can just change this to do .Decode(fr), and switch on the type
-	if err := scheme.Serializer.Decoder().DecodeInto(fr, ss); err != nil {
-		return nil, nil, "", nil, errors.Wrapf(err, "couldn't decode the file %q into a sealed secret", secretFileName)
-	}
-
-	fingerprint, err := crypto.PublicKeyFingerprint(&key.PublicKey)
-	if err != nil {
-		return nil, nil, "", nil, err
-	}
-	keys := map[string]*rsa.PrivateKey{fingerprint: key}
-
-	codecs := scheme.Serializer.Codecs()
-	if codecs == nil {
-		return nil, nil, "", nil, fmt.Errorf("codecs must not be nil")
-	}
-	secret, err := ss.Unseal(*codecs, keys)
-	if err != nil {
-		return nil, nil, "", nil, errors.Wrap(err, "Could not unseal auth secret")
-	}
-	decrypted := map[string][]byte{}
-	secretName := secret.Name
-	for _, key := range pemKeys {
-		fileContents, ok := secret.Data[key]
-		if !ok {
-			return nil, nil, "", nil, fmt.Errorf("Missing auth config value for: %q in secret %q", key, secretName)
-		}
-		resName := secretName + "-" + key
-		fileName := filepath.Join(PemDestDir, secretName, key+".pem")
-		b.AddResource("install:"+resName, &resource.File{Content: string(fileContents), Destination: fileName}, plan.DependOn("set-perms:pem-dir"))
-		decrypted[key] = fileContents
-	}
-	contextName := secretName + "-webhook"
-	userName := secretName + "-api-server"
-	config := &clientcmdapi.Config{
-		Kind:       "Config",
-		APIVersion: "v1",
-		Clusters: map[string]*clientcmdapi.Cluster{
-			secretName: {
-				CertificateAuthority: filepath.Join(PemDestDir, secretName, "certificate-authority.pem"),
-				Server:               URL,
-			},
-		},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			userName: {
-				ClientCertificate: filepath.Join(PemDestDir, secretName, "client-certificate.pem"),
-				ClientKey:         filepath.Join(PemDestDir, secretName, "client-key.pem"),
-			},
-		},
-		CurrentContext: contextName,
-		Contexts: map[string]*clientcmdapi.Context{
-			contextName: {
-				Cluster:  secretName,
-				AuthInfo: userName,
-			},
-		},
-	}
-	authConfig, err := clientcmd.Write(*config)
-	if err != nil {
-		return nil, nil, "", nil, err
-	}
-	configResource := &resource.File{Content: string(authConfig), Destination: filepath.Join(ConfigDestDir, secretName+".yaml")}
-	b.AddResource("install:"+secretName, configResource, plan.DependOn("set-perms:pem-dir"))
-
-	return contents, decrypted, secretName, authConfig, nil
-}
-
-func createSealedSecretKeySecretManifest(privateKey, cert, ns string) ([]byte, error) {
-	secret := &v1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: sealedSecretKeySecretName, Namespace: "kube-system"},
-		Type:       v1.SecretTypeOpaque,
-	}
-	secret.Data = map[string][]byte{}
-	secret.StringData = map[string]string{}
-	secret.StringData[v1.TLSPrivateKeyKey] = privateKey
-	secret.StringData[v1.TLSCertKey] = cert
-	return yaml.Marshal(secret)
 }
 
 // processDeployKey adds the encoded deploy key to the set of parameters used to configure flux

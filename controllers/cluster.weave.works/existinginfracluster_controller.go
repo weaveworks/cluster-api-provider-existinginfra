@@ -52,8 +52,6 @@ import (
 )
 
 const (
-	LocalCluster   = "wks.weave.works/local-cluster"
-	Created        = "wks.weave.works/is-created"
 	PoolSecretName = "ip-pool"
 )
 
@@ -90,15 +88,15 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	if _, found := eic.Annotations[LocalCluster]; !found {
-		if _, found = eic.Annotations[Created]; !found {
+	if _, found := eic.Annotations[capeios.LocalCluster]; !found {
+		if _, found = eic.Annotations[capeios.Created]; !found {
 			contextLog.Info("About to set up new cluster")
 			if err := r.setupInitialWorkloadCluster(ctx, eic); err != nil {
 				contextLog.Infof("Failed to set up new cluster: %v", err)
 				return ctrl.Result{}, err
 			}
 			contextLog.Info("Finished setting up new cluster")
-			if err := r.setEICAnnotation(ctx, eic, Created, "true"); err != nil {
+			if err := r.setEICAnnotation(ctx, eic, capeios.Created, "true"); err != nil {
 				log.Infof("Error setting annotation: %v", err)
 				return ctrl.Result{}, err
 			}
@@ -176,7 +174,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	if err != nil {
 		return err
 	}
-	if err := r.setEICAnnotation(ctx, eic, LocalCluster, "true"); err != nil {
+	if err := r.setEICAnnotation(ctx, eic, capeios.LocalCluster, "true"); err != nil {
 		return err
 	}
 	machines, eims, err := r.createMachines(machineInfo, int(controlPlaneCount), eic.Spec.KubernetesVersion, eic.Namespace, eic.Name)
@@ -298,7 +296,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrap(err, "failed to extract configuration")
 	}
 	eic = &cleanEic
-	eic.Annotations[LocalCluster] = "true"
+	eic.Annotations[capeios.LocalCluster] = "true"
 	clusterManifest, err := marshal(cluster, eic)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal cluster manifests")
