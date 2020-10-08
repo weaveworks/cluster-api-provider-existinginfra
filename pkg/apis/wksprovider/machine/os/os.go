@@ -14,8 +14,6 @@ import (
 	"strings"
 	"text/template"
 
-	ssv1alpha1 "github.com/bitnami-labs/sealed-secrets/pkg/apis/sealed-secrets/v1alpha1"
-	"github.com/bitnami-labs/sealed-secrets/pkg/crypto"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -25,7 +23,6 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
-	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/scheme"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
@@ -36,15 +33,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/client-go/util/keyutil"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	"sigs.k8s.io/yaml"
 )
 
 // TODO replace wksctl with a more generic term
 const (
+	LocalCluster              = "wks.weave.works/local-cluster"
+	Created                   = "wks.weave.works/is-created"
 	PemDestDir                = "/etc/pki/weaveworks/wksctl/pem"
 	ConfigDestDir             = "/etc/pki/weaveworks/wksctl"
 	sealedSecretVersion       = "v0.11.0"
@@ -261,6 +257,9 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 
 	// Get cluster
 	cluster := params.ExistingInfraCluster
+
+	log.Infof("Got cluster")
+
 	kubernetesVersion := getKubernetesVersion(&cluster)
 	log.Info("Got Kubernetes version")
 
