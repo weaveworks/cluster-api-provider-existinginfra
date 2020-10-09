@@ -5,8 +5,8 @@ package manifests
 import (
 	"net/http"
 
-	"github.com/weaveworks/wksctl/pkg/utilities/fixeddate"
+	"github.com/weavework/cluster-api-provider-existinginfra/pkg/utilities/fixeddate"
 )
 
-// Manifests contains wksctl's manifests.
+// Manifests contains existinginfra manifests.
 var Manifests http.FileSystem = fixeddate.Dir("yaml")

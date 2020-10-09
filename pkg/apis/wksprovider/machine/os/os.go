@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// TODO replace wksctl with a more generic term
 const (
 	LocalCluster              = "wks.weave.works/local-cluster"
 	Created                   = "wks.weave.works/is-created"
