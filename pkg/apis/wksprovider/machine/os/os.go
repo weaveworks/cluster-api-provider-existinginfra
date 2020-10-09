@@ -356,7 +356,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	ctlrRsc := &resource.KubectlApply{Manifest: wksCtlrManifest, Filename: object.String("wks_controller.yaml")}
 	b.AddResource("install:wks", ctlrRsc, plan.DependOn("kubectl:apply:cluster", dep))
 
-	if err := configureFlux(b, params); err != nil {
+	if err := ConfigureFlux(b, params); err != nil {
 		return nil, errors.Wrap(err, "Failed to configure flux")
 	}
 
@@ -445,7 +445,7 @@ func wksControllerManifest(controller ControllerParams, namespace string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	return updateControllerImage(content, controller.ImageOverride)
+	return UpdateControllerImage(content, controller.ImageOverride)
 }
 
 func sealedSecretCRDManifest(namespace string) ([]byte, error) {
@@ -456,10 +456,6 @@ func sealedSecretControllerManifest(namespace string) ([]byte, error) {
 	return getManifest(sealedSecretControllerManifestString, namespace)
 }
 
-func fluxManifest(namespace string) ([]byte, error) {
-	return getManifest(fluxManifestString, namespace)
-}
-
 func getManifest(manifestString, namespace string) ([]byte, error) {
 	return manifest.WithNamespace(serializer.FromBytes([]byte(manifestString)), namespace)
 }
@@ -468,7 +464,7 @@ const deployment = "Deployment"
 
 // updateControllerImage replaces the controller image in the manifest and
 // returns the updated manifest
-func updateControllerImage(manifest []byte, controllerImageOverride string) ([]byte, error) {
+func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]byte, error) {
 	if controllerImageOverride == "" {
 		return manifest, nil
 	}
@@ -516,12 +512,12 @@ func SetWeaveNetPodCIDRBlock(manifests [][]byte, podsCIDRBlock string) ([][]byte
 	}
 
 	// Find and parse the DaemonSet included in the manifest list into an object
-	idx, daemonSet, err := findDaemonSet(manifestList)
+	idx, daemonSet, err := FindDaemonSet(manifestList)
 	if err != nil {
 		return nil, errors.New("failed to find daemonset in weave-net manifest")
 	}
 
-	err = injectEnvVarToContainer(daemonSet.Spec.Template.Spec.Containers, containerName, *podCIDRBlock)
+	err = InjectEnvVarToContainer(daemonSet.Spec.Template.Spec.Containers, containerName, *podCIDRBlock)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to inject env var to weave container")
 	}
@@ -537,7 +533,7 @@ func SetWeaveNetPodCIDRBlock(manifests [][]byte, podsCIDRBlock string) ([][]byte
 }
 
 // Finds container in the list by name, adds an env var, fails if env var exists with different value
-func injectEnvVarToContainer(
+func InjectEnvVarToContainer(
 	containers []v1.Container, name string, newEnvVar v1.EnvVar) error {
 	var targetContainer v1.Container
 	containerFound := false
@@ -572,7 +568,7 @@ func injectEnvVarToContainer(
 }
 
 // Returns a daemonset manifest from a list
-func findDaemonSet(manifest *v1.List) (int, *appsv1.DaemonSet, error) {
+func FindDaemonSet(manifest *v1.List) (int, *appsv1.DaemonSet, error) {
 	if manifest == nil {
 		return -1, nil, errors.New("manifest is nil")
 	}
@@ -912,13 +908,29 @@ func readAndBase64EncodeKey(keypath string) (string, error) {
 	return base64.StdEncoding.EncodeToString(content), nil
 }
 
-func configureFlux(b *plan.Builder, params SeedNodeParams) error {
+func ConfigureFlux(b *plan.Builder, params SeedNodeParams) error {
 	gitData := params.GitData
 	if gitData.GitURL == "" {
 		return nil
 	}
-	fluxManifest, err := fluxManifest(params.Namespace)
+
+	t, err := template.New("flux-config").Parse(fluxManifestTemplate)
 	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	if err = t.Execute(&buf, struct {
+		Namespace string
+		GitURL    string
+		GitBranch string
+		GitPath   string
+	}{
+		params.Namespace,
+		gitData.GitURL,
+		gitData.GitBranch,
+		gitData.GitPath,
+	}); err != nil {
 		return err
 	}
 
@@ -926,11 +938,12 @@ func configureFlux(b *plan.Builder, params SeedNodeParams) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to generate git deploy secret manifest for flux")
 	}
+
 	secretResName := "flux-git-deploy-secret"
 	fluxSecretRsc := &resource.KubectlApply{OpaqueManifest: manifest, Filename: object.String(secretResName + ".yaml")}
 	b.AddResource("install:flux:"+secretResName, fluxSecretRsc, plan.DependOn("kubectl:apply:cluster", "kubectl:apply:machines"))
 
-	fluxRsc := &resource.KubectlApply{Manifest: fluxManifest, Filename: object.String("flux.yaml")}
+	fluxRsc := &resource.KubectlApply{Manifest: buf.Bytes(), Filename: object.String("flux.yaml")}
 	b.AddResource("install:flux:main", fluxRsc, plan.DependOn("install:flux:flux-git-deploy-secret"))
 	return nil
 }
@@ -1350,7 +1363,7 @@ rules:
   - get
 `
 
-const fluxManifestString = `
+const fluxManifestTemplate = `
 apiVersion: v1
 items:
 - apiVersion: v1
@@ -1359,7 +1372,7 @@ items:
     labels:
       name: flux
     name: flux
-    namespace: weavek8sops
+    namespace: {{ .Namespace }}
 - apiVersion: rbac.authorization.k8s.io/v1beta1
   kind: ClusterRole
   metadata:
@@ -1459,10 +1472,10 @@ items:
         containers:
         - args:
           - --ssh-keygen-dir=/var/fluxd/keygen
-          - --git-url=git@github.com:weaveworks/wk-quickstart.git
-          - --git-branch=make-TRACK-switchable
+          - --git-url={{ .GitURL }}
+          - --git-branch={{ .GitBranch }}
           - --git-poll-interval=30s
-          - --git-path=setup
+          - --git-path={{ .GitPath }}
           - --git-readonly
           - --memcached-hostname=memcached.weavek8sops.svc.cluster.local
           - --memcached-service=memcached
