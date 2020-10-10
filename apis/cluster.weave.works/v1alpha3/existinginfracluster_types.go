@@ -38,6 +38,8 @@ type ClusterSpec struct {
 	DeprecatedSSHKeyPath     string `json:"sshKeyPath,omitempty"`
 	HTTPProxy                string `json:"httpProxy,omitempty"`
 
+	WorkloadCluster bool `json:"workloadCluster,omitempty"`
+
 	Authentication *AuthenticationWebhook `json:"authenticationWebhook,omitempty"`
 	Authorization  *AuthorizationWebhook  `json:"authorizationWebhook,omitempty"`
 

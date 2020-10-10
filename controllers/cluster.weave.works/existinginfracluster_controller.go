@@ -88,18 +88,18 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	if _, found := eic.Annotations[capeios.LocalCluster]; !found {
-		if _, found = eic.Annotations[capeios.Created]; !found {
+	if eic.Spec.WorkloadCluster {
+		created, err := r.machinesCreated(ctx, eic)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if !created {
 			contextLog.Info("About to set up new cluster")
 			if err := r.setupInitialWorkloadCluster(ctx, eic); err != nil {
 				contextLog.Infof("Failed to set up new cluster: %v", err)
 				return ctrl.Result{}, err
 			}
 			contextLog.Info("Finished setting up new cluster")
-			if err := r.setEICAnnotation(ctx, eic, capeios.Created, "true"); err != nil {
-				log.Infof("Error setting annotation: %v", err)
-				return ctrl.Result{}, err
-			}
 		}
 	}
 
@@ -110,7 +110,7 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	}
 	if cluster == nil {
 		contextLog.Info("Cluster Controller has not yet set ownerReferences")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
 	}
 	contextLog = contextLog.WithField("cluster", cluster.Name)
 
@@ -174,7 +174,9 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	if err != nil {
 		return err
 	}
-	if err := r.setEICAnnotation(ctx, eic, capeios.LocalCluster, "true"); err != nil {
+	if err := r.modifyEIC(ctx, eic, func(eic *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+		eic.Spec.WorkloadCluster = true
+	}); err != nil {
 		return err
 	}
 	machines, eims, err := r.createMachines(machineInfo, int(controlPlaneCount), eic.Spec.KubernetesVersion, eic.Namespace, eic.Name)
@@ -188,6 +190,18 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 		r.deallocate(ctx, machineInfo, eic.Namespace)
 	}
 	return finalError
+}
+
+func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) (bool, error) {
+	var machines clusterv1.MachineList
+	err := r.Client.List(ctx, &machines, &client.ListOptions{Namespace: eic.Namespace})
+	if err != nil {
+		return false, err
+	}
+	if len(machines.Items) > 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (r *ExistingInfraClusterReconciler) newBuilderWithMgr(mgr ctrl.Manager) *builder.Builder {
@@ -204,17 +218,7 @@ func (r *ExistingInfraClusterReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 	return r.newBuilderWithMgr(mgr).WithOptions(options).Complete(r)
 }
 
-func (a *ExistingInfraClusterReconciler) setEICAnnotation(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, key, value string) error {
-	err := a.modifyCluster(ctx, eic, func(cluster *clusterweaveworksv1alpha3.ExistingInfraCluster) {
-		cluster.Annotations[key] = value
-	})
-	if err != nil {
-		return gerrors.Wrapf(err, "Failed to set annotation: %s for cluster: %s", key, eic.Name)
-	}
-	return nil
-}
-
-func (r *ExistingInfraClusterReconciler) modifyCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
+func (r *ExistingInfraClusterReconciler) modifyEIC(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, updater func(*clusterweaveworksv1alpha3.ExistingInfraCluster)) error {
 	contextLog := log.WithFields(log.Fields{"cluster": eic.Name})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result clusterweaveworksv1alpha3.ExistingInfraCluster
@@ -296,7 +300,6 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrap(err, "failed to extract configuration")
 	}
 	eic = &cleanEic
-	eic.Annotations[capeios.LocalCluster] = "true"
 	clusterManifest, err := marshal(cluster, eic)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal cluster manifests")
@@ -341,7 +344,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrapf(err, "failed to set up seed node (%s)", sp.GetMasterPublicAddress())
 	}
 
-	r.modifyCluster(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+	r.modifyEIC(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
 		eic.Status.Ready = true
 	})
 

@@ -36,8 +36,6 @@ import (
 
 // TODO replace wksctl with a more generic term
 const (
-	LocalCluster              = "wks.weave.works/local-cluster"
-	Created                   = "wks.weave.works/is-created"
 	PemDestDir                = "/etc/pki/weaveworks/wksctl/pem"
 	ConfigDestDir             = "/etc/pki/weaveworks/wksctl"
 	sealedSecretVersion       = "v0.11.0"
@@ -200,8 +198,6 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 
 	// Get cluster
 	cluster := params.ExistingInfraCluster
-	log.Infof("Got cluster")
-
 	kubernetesVersion := getKubernetesVersion(&cluster)
 	log.Info("Got Kubernetes version")
 
@@ -331,8 +327,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 
 	b.AddResource("install:configmaps", configMapPlan, plan.DependOn(configDeps[0], configDeps[1:]...))
 
-	applyClstrRsc := &resource.KubectlApply{Manifest: []byte(params.ClusterManifest), Namespace: object.String(params.Namespace)}
-
+	applyClstrRsc := &resource.KubectlApply{Manifest: []byte(params.ClusterManifest), Namespace: object.String(params.Namespace), Filename: object.String("clustermanifest")}
 	b.AddResource("kubectl:apply:cluster", applyClstrRsc, plan.DependOn("install:configmaps", kubectlApplyDeps...))
 
 	mManRsc := &resource.KubectlApply{Manifest: []byte(params.MachinesManifest), Filename: object.String("machinesmanifest"), Namespace: object.String(params.Namespace)}
@@ -1028,8 +1023,7 @@ func getConfigMap(manifest []byte) (*v1.ConfigMap, error) {
 	return configMap, nil
 }
 
-const capiControllerManifestString = `
-apiVersion: apps/v1
+const capiControllerManifestString = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: capi-controller
@@ -1063,8 +1057,7 @@ spec:
             memory: 20Mi
 `
 
-const wksControllerManifestString = `
-apiVersion: apps/v1
+const wksControllerManifestString = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: wks-controller
@@ -1127,8 +1120,7 @@ spec:
             memory: 20Mi
 `
 
-const sealedSecretCRDManifestString = `
-apiVersion: apiextensions.k8s.io/v1beta1
+const sealedSecretCRDManifestString = `apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   name: sealedsecrets.bitnami.com
@@ -1143,8 +1135,7 @@ spec:
   version: v1alpha1
 `
 
-const sealedSecretControllerManifestString = `
-apiVersion: v1
+const sealedSecretControllerManifestString = `apiVersion: v1
 kind: Service
 metadata:
   annotations: {}
@@ -1363,8 +1354,7 @@ rules:
   - get
 `
 
-const fluxManifestTemplate = `
-apiVersion: v1
+const fluxManifestTemplate = `apiVersion: v1
 items:
 - apiVersion: v1
   kind: ServiceAccount

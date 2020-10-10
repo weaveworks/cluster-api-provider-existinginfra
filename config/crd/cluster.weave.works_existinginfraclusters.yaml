@@ -136,6 +136,8 @@ spec:
               type: string
             workerMachineCount:
               type: string
+            workloadCluster:
+              type: boolean
             os:
               properties:
                 files:

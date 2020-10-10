@@ -30,6 +30,7 @@ spec:
   kubernetesVersion: "${KUBERNETES_VERSION}"
   controlPlaneMachineCount: "${CONTROL_PLANE_MACHINE_COUNT}"
   workerMachineCount: "${WORKER_MACHINE_COUNT}"
+  workloadCluster: true
   os:
     files:
     - source:

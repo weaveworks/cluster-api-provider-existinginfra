@@ -26,11 +26,11 @@ test: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
 
 # Generate CRDs
 CRDS=$(shell find config/crd -name '*.yaml' -print)
-pkg/apis/wksprovider/machine/crds_vfsdata.go: $(CRDS)
+pkg/apis/wksprovider/machine/crds/crds_vfsdata.go: $(CRDS)
 	go generate ./pkg/apis/wksprovider/machine/crds
 
 # Build manager binary
-manager: pkg/apis/wksprovider/machine/crds_vfsdata.go generate fmt vet
+manager: pkg/apis/wksprovider/machine/crds/crds_vfsdata.go generate fmt vet
 	go build -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
