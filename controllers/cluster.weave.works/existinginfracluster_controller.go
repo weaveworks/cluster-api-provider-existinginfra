@@ -52,7 +52,8 @@ import (
 )
 
 const (
-	PoolSecretName = "ip-pool"
+	PoolSecretName       = "ip-pool"
+	ConnectionSecretName = "connection-info"
 )
 
 // ExistingInfraClusterReconciler reconciles a ExistingInfraCluster object
@@ -61,14 +62,6 @@ type ExistingInfraClusterReconciler struct {
 	Log           logr.Logger
 	Scheme        *runtime.Scheme
 	eventRecorder record.EventRecorder
-}
-
-type MachineInfo struct {
-	SSHKey      string `json:"sshKey"`
-	PublicIP    string `json:"publicIP"`
-	PublicPort  string `json:"publicPort"`
-	PrivateIP   string `json:"privateIP"`
-	PrivatePort string `json:"privatePort"`
 }
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginfraclusters,verbs=get;list;watch;create;update;patch;delete
@@ -198,6 +191,7 @@ func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, ei
 	if err != nil {
 		return false, err
 	}
+	log.Infof("ML: %#v", machines)
 	if len(machines.Items) > 0 {
 		return true, nil
 	}
@@ -260,7 +254,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	eic *clusterweaveworksv1alpha3.ExistingInfraCluster,
 	machines []*clusterv1.Machine,
 	eims []*clusterweaveworksv1alpha3.ExistingInfraMachine,
-	machineInfo []*MachineInfo) error {
+	machineInfo []capeios.MachineInfo) error {
 	sp := specs.New(cluster, eic, machines, eims)
 	sshKey, err := getSSHKey(machineInfo[0])
 	if err != nil {
@@ -325,7 +319,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		ExistingInfraCluster: *eic,
 		ClusterManifest:      clusterManifest,
 		MachinesManifest:     machinesManifest,
-		SSHKey:               string(sshKey),
+		ConnectionInfo:       machineInfo,
 		BootstrapToken:       token,
 		KubeletConfig: config.KubeletConfig{
 			NodeIP:         sp.GetMasterPrivateAddress(),
@@ -352,7 +346,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	return nil
 }
 
-func getSSHKey(info *MachineInfo) ([]byte, error) {
+func getSSHKey(info capeios.MachineInfo) ([]byte, error) {
 	decoded, err := base64.StdEncoding.DecodeString(info.SSHKey)
 	if err != nil {
 		return nil, err
@@ -360,7 +354,7 @@ func getSSHKey(info *MachineInfo) ([]byte, error) {
 	return decoded, nil
 }
 
-func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachines int, ns string) ([]*MachineInfo, error) {
+func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachines int, ns string) ([]capeios.MachineInfo, error) {
 	log.Infof("Starting allocation of %d machines", numMachines)
 	var secret corev1.Secret
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: PoolSecretName}, &secret); err != nil {
@@ -368,7 +362,7 @@ func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachin
 	}
 	log.Info("Got secret")
 	jsonData := []byte(secret.Data["config"])
-	var info []MachineInfo
+	var info []capeios.MachineInfo
 	if err := json.Unmarshal(jsonData, &info); err != nil {
 		return nil, err
 	}
@@ -378,12 +372,7 @@ func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachin
 		return nil, fmt.Errorf("Insufficient machines to create cluster; required: %d, available: %d", numMachines, len(info))
 	}
 	log.Info("Sufficient machines are present")
-	resultMachines := []*MachineInfo{}
-	for _, m := range info[:numMachines] {
-		mref := m
-		resultMachines = append(resultMachines, &mref)
-	}
-
+	resultMachines := info[:numMachines]
 	info = info[numMachines:]
 	infoBytes, err := json.Marshal(info)
 	if err != nil {
@@ -414,7 +403,7 @@ func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachin
 	return resultMachines, nil
 }
 
-func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machines []*MachineInfo, ns string) error {
+func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machines []capeios.MachineInfo, ns string) error {
 	log.Infof("Starting deallocation of %d machines", len(machines))
 	var secret corev1.Secret
 	if err := r.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: PoolSecretName}, &secret); err != nil {
@@ -422,14 +411,14 @@ func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machine
 	}
 	log.Info("Got secret for deallocation")
 	jsonData := []byte(secret.Data["config"])
-	var info []MachineInfo
+	var info []capeios.MachineInfo
 	if err := json.Unmarshal(jsonData, &info); err != nil {
 		return err
 	}
 	log.Info("Unmarshaled secret")
 
 	for _, m := range machines {
-		info = append(info, *m)
+		info = append(info, m)
 	}
 	infoBytes, err := json.Marshal(info)
 	if err != nil {
@@ -474,7 +463,7 @@ func (r *ExistingInfraClusterReconciler) getCluster(ctx context.Context, eic *cl
 	return &outputCluster, nil
 }
 
-func (r *ExistingInfraClusterReconciler) createMachines(minfo []*MachineInfo, controlPlaneCount int, k8sVersion, namespace, name string) ([]*clusterv1.Machine, []*clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
+func (r *ExistingInfraClusterReconciler) createMachines(minfo []capeios.MachineInfo, controlPlaneCount int, k8sVersion, namespace, name string) ([]*clusterv1.Machine, []*clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
 	machines := []*clusterv1.Machine{}
 	eims := []*clusterweaveworksv1alpha3.ExistingInfraMachine{}
 
@@ -491,11 +480,11 @@ func (r *ExistingInfraClusterReconciler) createMachines(minfo []*MachineInfo, co
 	return machines, eims, nil
 }
 
-func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion, ns, name string) (*clusterv1.Machine, *clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
+func createMachine(minfo capeios.MachineInfo, idx int, isControlPlane bool, k8sVersion, ns, name string) (*clusterv1.Machine, *clusterweaveworksv1alpha3.ExistingInfraMachine, error) {
 	var machine clusterv1.Machine
 	var eim clusterweaveworksv1alpha3.ExistingInfraMachine
 
-	log.Infof("Creating machine: %v", *minfo)
+	log.Infof("Creating machine: %v", minfo.PublicIP)
 	baseName := "worker"
 	if isControlPlane {
 		baseName = "master"
@@ -528,7 +517,6 @@ func createMachine(minfo *MachineInfo, idx int, isControlPlane bool, k8sVersion,
 	eim.Name = machineName
 
 	publicEndpoint := &eim.Spec.Public
-	//	publicAddress, err := toUint16(minfo.PublicIP)
 	publicAddress := minfo.PublicIP
 	publicEndpoint.Address = publicAddress
 	publicPort, err := toUint16(minfo.PublicPort)
