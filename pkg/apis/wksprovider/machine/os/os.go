@@ -3,6 +3,7 @@ package os
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -48,6 +49,14 @@ data:
 kind: Secret
 metadata:
   name: flux-git-deploy
+  namespace: {{.Namespace}}
+type: Opaque`
+	connectionSecretTemplate = `apiVersion: v1
+data:
+  config: {{.SecretValue}}
+kind: Secret
+metadata:
+  name: connection-info
   namespace: {{.Namespace}}
 type: Opaque`
 )
@@ -130,6 +139,16 @@ type ControllerParams struct {
 	ImageBuiltin string
 }
 
+// MachineInfo holds connection information (key, ips, ports) about a machine
+type MachineInfo struct {
+	SSHUser     string `json:"sshUser"`
+	SSHKey      string `json:"sshKey"`
+	PublicIP    string `json:"publicIP"`
+	PublicPort  string `json:"publicPort"`
+	PrivateIP   string `json:"privateIP"`
+	PrivatePort string `json:"privatePort"`
+}
+
 // SeedNodeParams groups required inputs to configure a "seed" Kubernetes node.
 type SeedNodeParams struct {
 	PublicIP             string
@@ -139,7 +158,7 @@ type SeedNodeParams struct {
 	ExistingInfraCluster existinginfrav1.ExistingInfraCluster
 	ClusterManifest      string
 	MachinesManifest     string
-	SSHKey               string
+	ConnectionInfo       []MachineInfo
 	// BootstrapToken is the token used by kubeadm init and kubeadm join
 	// to safely form new clusters.
 	BootstrapToken       *kubeadmapi.BootstrapTokenString
@@ -250,7 +269,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 			KubeletConfig:         &params.KubeletConfig,
 			ConntrackMax:          cfg.ConntrackMax,
 			UseIPTables:           cfg.UseIPTables,
-			SSHKey:                params.SSHKey,
+			SSHKey:                params.ConnectionInfo[0].SSHKey,
 			BootstrapToken:        params.BootstrapToken,
 			ControlPlaneEndpoint:  controlPlaneEndpoint,
 			IgnorePreflightErrors: cfg.IgnorePreflightErrors,
@@ -334,13 +353,22 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	b.AddResource("kubectl:apply:machines", mManRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
 
 	dep := addSealedSecretWaitIfNecessary(b, params.SealedSecretKey, params.SealedSecretCert)
+	connManifest, err := createConnectionSecret(params.Namespace, params.ConnectionInfo)
+	if err != nil {
+		return nil, err
+	}
+	b.AddResource("install:connection:info",
+		&resource.KubectlApply{
+			Manifest: connManifest,
+			Filename: object.String("connectionmanifest")},
+		plan.DependOn(dep))
 	{
 		capiCtlrManifest, err := capiControllerManifest(params.Controller, params.Namespace)
 		if err != nil {
 			return nil, err
 		}
 		ctlrRsc := &resource.KubectlApply{Manifest: capiCtlrManifest, Filename: object.String("capi_controller.yaml")}
-		b.AddResource("install:capi", ctlrRsc, plan.DependOn("kubectl:apply:cluster", dep))
+		b.AddResource("install:capi", ctlrRsc, plan.DependOn("kubectl:apply:cluster", "install:connection:info"))
 	}
 
 	wksCtlrManifest, err := wksControllerManifest(params.Controller, params.Namespace)
@@ -941,6 +969,27 @@ func ConfigureFlux(b *plan.Builder, params SeedNodeParams) error {
 	fluxRsc := &resource.KubectlApply{Manifest: buf.Bytes(), Filename: object.String("flux.yaml")}
 	b.AddResource("install:flux:main", fluxRsc, plan.DependOn("install:flux:flux-git-deploy-secret"))
 	return nil
+}
+
+func createConnectionSecret(namespace string, connInfo []MachineInfo) ([]byte, error) {
+	t, err := template.New("local-ip-pool").Parse(connectionSecretTemplate)
+	if err != nil {
+		return nil, err
+	}
+	infostr, err := json.Marshal(connInfo)
+	if err != nil {
+		return nil, err
+	}
+	encoded := base64.StdEncoding.EncodeToString(infostr)
+	var populated bytes.Buffer
+	err = t.Execute(&populated, struct {
+		Namespace   string
+		SecretValue string
+	}{namespace, encoded})
+	if err != nil {
+		return nil, err
+	}
+	return populated.Bytes(), nil
 }
 
 func createFluxSecretFromGitData(gitData GitParams, params SeedNodeParams) ([]byte, error) {

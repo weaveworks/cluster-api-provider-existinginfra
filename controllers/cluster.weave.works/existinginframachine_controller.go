@@ -202,13 +202,19 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 }
 
 func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, m *existinginfrav1.ExistingInfraMachine) (*os.OS, io.Closer, error) {
-	sshKey, err := a.sshKey(ctx)
+	privateAddress := a.getMachineAddress(m)
+	info, err := a.getMachineInfo(ctx, privateAddress)
 	if err != nil {
-		return nil, nil, gerrors.Wrap(err, "failed to read SSH key")
+		return nil, nil, err
 	}
+	sshKey, err := getSSHKey(info)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	sshClient, err := ssh.NewClient(ssh.ClientParams{
-		User:         c.Spec.User,
-		Host:         a.getMachineAddress(m),
+		User:         info.SSHUser,
+		Host:         privateAddress,
 		Port:         m.Spec.Private.Port,
 		PrivateKey:   sshKey,
 		PrintOutputs: a.verbose,
@@ -221,6 +227,25 @@ func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *exist
 		return nil, nil, gerrors.Wrapf(err, "failed to identify machine %s's operating system", a.getMachineAddress(m))
 	}
 	return os, sshClient, nil
+}
+
+func (a *ExistingInfraMachineReconciler) getMachineInfo(ctx context.Context, privateAddress string) (os.MachineInfo, error) {
+	var secret corev1.Secret
+	err := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: ConnectionSecretName}, &secret)
+	if err != nil {
+		return os.MachineInfo{}, gerrors.Wrap(err, "failed to get connection secret")
+	}
+	pool := secret.Data["config"]
+	var info []os.MachineInfo
+	if err := json.Unmarshal(pool, &info); err != nil {
+		return os.MachineInfo{}, gerrors.Wrap(err, "failed to unmarshal secret")
+	}
+	for _, m := range info {
+		if m.PrivateIP == privateAddress {
+			return m, nil
+		}
+	}
+	return os.MachineInfo{}, fmt.Errorf("No machine information found for: %s", privateAddress)
 }
 
 func (a *ExistingInfraMachineReconciler) sshKey(ctx context.Context) ([]byte, error) {
