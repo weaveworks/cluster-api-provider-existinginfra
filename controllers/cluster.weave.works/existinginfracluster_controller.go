@@ -65,14 +65,6 @@ type ExistingInfraClusterReconciler struct {
 	eventRecorder record.EventRecorder
 }
 
-type MachineInfo struct {
-	SSHKey      string `json:"sshKey"`
-	PublicIP    string `json:"publicIP"`
-	PublicPort  string `json:"publicPort"`
-	PrivateIP   string `json:"privateIP"`
-	PrivatePort string `json:"privatePort"`
-}
-
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginfraclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginfraclusters/status,verbs=get;update;patch
 
@@ -206,6 +198,7 @@ func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, ei
 	if err != nil {
 		return false, err
 	}
+	log.Infof("ML: %#v", machines)
 	if len(machines.Items) > 0 {
 		return true, nil
 	}
