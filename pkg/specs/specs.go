@@ -1,9 +1,15 @@
 package specs
 
 import (
+	"fmt"
+
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/cluster/machine"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/scheme"
+	"github.com/weaveworks/libgitops/pkg/serializer"
+	"io"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 )
@@ -86,6 +92,40 @@ func PrintErrors(errors field.ErrorList) {
 	for _, e := range errors {
 		log.Errorf("%v\n", e)
 	}
+}
+
+// ParseCluster converts the manifest file into a Cluster
+func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existinginfrav1.ExistingInfraCluster, err error) {
+	// Read from the ReadCloser YAML document-by-document
+	fr := serializer.NewYAMLFrameReader(rc)
+
+	// Decode all objects in the FrameReader
+	objs, err := scheme.Serializer.Decoder().DecodeAll(fr)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to parse cluster manifest")
+	}
+
+	// Loop through the untyped objects we got and add them to the specific lists
+	for _, obj := range objs {
+		switch typed := obj.(type) {
+		case *clusterv1.Cluster:
+			cluster = typed
+		case *existinginfrav1.ExistingInfraCluster:
+			eic = typed
+		default:
+			return nil, nil, fmt.Errorf("unexpected type %T", obj)
+		}
+	}
+
+	if cluster == nil {
+		return nil, nil, errors.New("parsed cluster manifest lacks Cluster definition")
+	}
+
+	if eic == nil {
+		return nil, nil, errors.New("parsed cluster manifest lacks ExistingInfraCluster definition")
+	}
+
+	return
 }
 
 // populateCluster mutates the cluster manifest:
