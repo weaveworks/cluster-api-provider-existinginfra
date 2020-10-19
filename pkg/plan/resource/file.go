@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/scripts"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
@@ -116,7 +116,7 @@ func (f *File) Apply(ctx context.Context, runner plan.Runner, diff plan.Diff) (b
 		return false, err
 	}
 
-	return true, scripts.WriteFile(ctx, content, f.Destination, 0660, runner)
+	return true, WriteFile(ctx, content, f.Destination, 0660, runner)
 }
 
 // Undo implements plan.Resource.
@@ -127,5 +127,12 @@ func (f *File) Undo(ctx context.Context, runner plan.Runner, current plan.State)
 	// created by the command are gone but we don't know if they've been
 	// created or not.
 	_, err := runner.RunCommand(ctx, fmt.Sprintf("rm -f %s", f.Destination), nil)
+	return err
+}
+
+func WriteFile(ctx context.Context, content []byte, dstPath string, perm os.FileMode, runner plan.Runner) error {
+	input := bytes.NewReader(content)
+	cmd := fmt.Sprintf("mkdir -pv $(dirname %q) && sed -n 'w %s' && chmod 0%o %q", dstPath, dstPath, perm, dstPath)
+	_, err := runner.RunCommand(ctx, cmd, input)
 	return err
 }

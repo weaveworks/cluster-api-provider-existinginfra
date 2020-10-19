@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/scripts"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 )
 
@@ -91,7 +90,7 @@ func fileExists(ctx context.Context, runner plan.Runner, path string) (bool, err
 // Apply implements plan.Resource.
 func (ks *KubeSecret) Apply(ctx context.Context, runner plan.Runner, diff plan.Diff) (bool, error) {
 	for fname, contents := range ks.SecretData {
-		err := scripts.WriteFile(ctx, contents, filepath.Join(ks.DestinationDirectory, ks.FileNameTransform(fname)), 0600, runner)
+		err := WriteFile(ctx, contents, filepath.Join(ks.DestinationDirectory, ks.FileNameTransform(fname)), 0600, runner)
 		if err != nil {
 			return false, err
 		}
