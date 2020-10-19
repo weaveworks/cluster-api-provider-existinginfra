@@ -44,7 +44,7 @@ uninstall: manifests
 # Clean up images and binaries
 clean:
 	rm -f bin/manager
-	docker rmi ${IMG}
+	-docker rmi ${IMG}
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
@@ -73,7 +73,7 @@ generate: controller-gen conversion-gen
 		-h hack/boilerplate.go.txt
 
 # Build the docker image
-docker-build: test
+docker-build:
 	docker build . -t ${IMG}
 
 # Push the docker image
