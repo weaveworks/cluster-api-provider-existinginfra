@@ -197,7 +197,6 @@ func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, ei
 	if err != nil {
 		return false, err
 	}
-	log.Infof("ML: %#v", machines)
 	if len(machines.Items) > 0 {
 		return true, nil
 	}
@@ -267,6 +266,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	if err != nil {
 		return err
 	}
+	log.Infof("USER: %s, Host: %s, Port: %d", getSSHUser(machineInfo[0]), sp.GetMasterPublicAddress(), sp.MasterSpec.Public.Port)
 	sshClient, err := ssh.NewClient(ssh.ClientParams{
 		User:         getSSHUser(machineInfo[0]),
 		PrivateKey:   sshKey,
