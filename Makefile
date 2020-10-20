@@ -21,8 +21,8 @@ endif
 all: manager
 
 # Run tests
-test: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
-	go test ./... -coverprofile cover.out -race -covermode=atomic
+unit-tests: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
+	go test -v ./pkg/... ./controllers/... -coverprofile cover.out -race -covermode=atomic
 
 # Generate CRDs
 CRDS=$(shell find config/crd -name '*.yaml' -print)
@@ -77,7 +77,7 @@ generate: controller-gen conversion-gen
 		-h hack/boilerplate.go.txt
 
 # Build the docker image
-docker-build: test
+docker-build: unit-tests
 	docker build . -t ${IMG}
 
 # Push the docker image
