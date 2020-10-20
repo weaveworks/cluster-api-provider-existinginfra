@@ -19,7 +19,8 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - unit-tests: {}
+      - unit-tests
+      - integration-tests
       - release:
           requires:
             - build
@@ -67,7 +68,24 @@ jobs:
           command: |
             go version
             make test
+  integration-tests:
+    <<: *defaults
+    steps:
+      - checkout
+      - run:
+          name: Install kubectl
+          command: |
+            curl -L $KUBECTL_URL -o kubectl.tar.gz
+            echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
+            tar xvzf kubectl.tar.gz --strip-components=3
+            sudo mv kubectl /usr/local/bin
 
+      - run:
+          name: Run integration tests
+          command: |
+            go version
+            cd test/integration/test
+            go test --timeout=99999s
   release:
     <<: *defaults
     steps:

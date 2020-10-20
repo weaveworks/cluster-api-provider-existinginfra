@@ -180,6 +180,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	log.Infof("Created machines: %v, %v", machines, eims)
 	initError := r.initiateCluster(ctx, cluster, eic, machines, eims, machineInfo)
 	if initError != nil && finalError == nil { // no panic
+		log.Errorf("Failed to initiate cluster: %v", initError)
 		r.deallocate(ctx, machineInfo, eic.Namespace)
 	}
 	return finalError
@@ -191,7 +192,6 @@ func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, ei
 	if err != nil {
 		return false, err
 	}
-	log.Infof("ML: %#v", machines)
 	if len(machines.Items) > 0 {
 		return true, nil
 	}
@@ -256,12 +256,15 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	eims []*clusterweaveworksv1alpha3.ExistingInfraMachine,
 	machineInfo []capeios.MachineInfo) error {
 	sp := specs.New(cluster, eic, machines, eims)
+	log.Infof("Got specs...")
+	log.Infof("Machine info: %#v", machineInfo[0])
 	sshKey, err := getSSHKey(machineInfo[0])
 	if err != nil {
 		return err
 	}
+	log.Infof("USER: %s, Host: %s, Port: %d", getSSHUser(machineInfo[0]), sp.GetMasterPublicAddress(), sp.MasterSpec.Public.Port)
 	sshClient, err := ssh.NewClient(ssh.ClientParams{
-		User:         sp.ClusterSpec.User,
+		User:         getSSHUser(machineInfo[0]),
 		PrivateKey:   sshKey,
 		Host:         sp.GetMasterPublicAddress(),
 		Port:         sp.MasterSpec.Public.Port,
@@ -269,6 +272,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	if err != nil {
 		return gerrors.Wrap(err, "failed to create SSH client")
 	}
+	log.Infof("Got ssh client...")
 	defer sshClient.Close()
 	log.Infof("Connected to %s via ssh", sp.GetMasterPublicAddress())
 	installer, err := capeios.Identify(sshClient)
@@ -352,6 +356,10 @@ func getSSHKey(info capeios.MachineInfo) ([]byte, error) {
 		return nil, err
 	}
 	return decoded, nil
+}
+
+func getSSHUser(info capeios.MachineInfo) string {
+	return info.SSHUser
 }
 
 func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachines int, ns string) ([]capeios.MachineInfo, error) {

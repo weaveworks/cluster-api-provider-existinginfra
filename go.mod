@@ -8,6 +8,7 @@ require (
 	github.com/cavaliercoder/go-rpm v0.0.0-20200122174316-8cb9fd9c31a8
 	github.com/chanwit/plandiff v1.0.0
 	github.com/fatih/structs v1.1.0
+	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v0.1.0
 	github.com/oleiade/reflections v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.12.1
@@ -22,9 +23,9 @@ require (
 	golang.org/x/build v0.0.0-20190927031335-2835ba2e683f
 	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
 	gopkg.in/oleiade/reflections.v1 v1.0.0
-	gopkg.in/yaml.v3 v3.0.0-20200121175148-a6ecf24a6d71
+	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 	k8s.io/api v0.18.6
-	k8s.io/apimachinery v0.18.6
+	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v0.18.6
 	k8s.io/cluster-bootstrap v0.18.6
 	k8s.io/kube-proxy v0.0.0
@@ -33,6 +34,7 @@ require (
 	k8s.io/utils v0.0.0-20200619165400-6e3d28b6ed19
 	sigs.k8s.io/cluster-api v0.3.6
 	sigs.k8s.io/controller-runtime v0.6.0
+	sigs.k8s.io/kind v0.9.0 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.4.2
 	sigs.k8s.io/yaml v1.2.0
 )
