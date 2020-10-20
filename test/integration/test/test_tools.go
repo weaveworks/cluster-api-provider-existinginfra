@@ -35,19 +35,6 @@ type commandConfig struct {
 	Stderr     *os.File
 }
 
-var gopath string
-
-// Set up path to include downloaded go commands (specifically, "kind")
-// func init() {
-//  cmd := exec.Command("go", "env", "GOPATH")
-//  out, err := cmd.CombinedOutput()
-//  if err != nil {
-//      log.Fatal("Could not read environment")
-//  }
-//  gopath = string(out)
-//  //	os.Setenv("PATH", filepath.Join(strings.TrimSpace(string(out)), "bin")+":"+os.Getenv("PATH"))
-// }
-
 // getContext returns a "context" object containing all the information needed to perform most
 // test tasks. Methods on the context object can be used to implement integration tests and manage
 // temporary directories, git repositories, and clusters.
@@ -72,7 +59,8 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 		testDir: getTestDir(t),
 	}
 	log.Info("Installing kind...")
-	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "GOPATH="+tmpDir, "HOME="+tmpDir), Stdout: os.Stdout, Stderr: os.Stderr}, "go", "get", "sigs.k8s.io/kind@v0.9.0")
+	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "GOPATH="+tmpDir, "HOME="+tmpDir, "CGOENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
+		"go", "get", "sigs.k8s.io/kind@v0.9.0")
 	log.Info("Installing clusterctl...")
 	for {
 		fetchCmd := fmt.Sprintf("curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.8/clusterctl-%s-%s -o %s/clusterctl && chmod a+x %s/clusterctl",
