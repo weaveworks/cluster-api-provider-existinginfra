@@ -84,7 +84,7 @@ generate: controller-gen conversion-gen image-tag-gen
 		-h hack/boilerplate.go.txt
 
 # Build the docker image
-docker-build:
+docker-build: unit-tests
 	docker build . -t ${IMG}
 
 # Push the docker image

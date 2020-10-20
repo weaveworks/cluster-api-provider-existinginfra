@@ -55,6 +55,8 @@ func NewClient(params ClientParams) (*Client, error) {
 		HostKeyCallback: sshutil.HostKeyCallback(hostPublicKey),
 	}
 	hostPort := fmt.Sprintf("%s:%d", params.Host, params.Port)
+	log.Infof("HOST/PORT: %s", hostPort)
+	log.Infof("KEY: %s", params.PrivateKey)
 	client, err := ssh.Dial(tcp, hostPort, config)
 	if err != nil {
 		return nil, errors.Wrapf(err,

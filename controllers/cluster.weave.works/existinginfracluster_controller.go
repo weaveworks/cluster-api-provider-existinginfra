@@ -185,7 +185,6 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	initError := r.initiateCluster(ctx, cluster, eic, machines, eims, machineInfo)
 	if initError != nil && finalError == nil { // no panic
 		log.Errorf("Failed to initiate cluster: %v", initError)
-		// FIXME, need error check here?
 		//nolint:errcheck
 		r.deallocate(ctx, machineInfo, eic.Namespace)
 	}
@@ -198,7 +197,6 @@ func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, ei
 	if err != nil {
 		return false, err
 	}
-	log.Infof("ML: %#v", machines)
 	if len(machines.Items) > 0 {
 		return true, nil
 	}
