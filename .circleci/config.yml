@@ -84,7 +84,6 @@ jobs:
           name: Run integration tests
           command: |
             go version
-            echo 'PWD:' $PWD
             cd test/integration/test
             go test --timeout=99999s
   release:

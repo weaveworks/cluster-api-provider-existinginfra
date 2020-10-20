@@ -35,15 +35,18 @@ type commandConfig struct {
 	Stderr     *os.File
 }
 
-// Set up path to include downloaded go commands (specifically, "clusterctl")
-func init() {
-	cmd := exec.Command("go", "env", "GOPATH")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Fatal("Could not read environment")
-	}
-	os.Setenv("PATH", filepath.Join(strings.TrimSpace(string(out)), "bin")+":"+os.Getenv("PATH"))
-}
+var gopath string
+
+// Set up path to include downloaded go commands (specifically, "kind")
+// func init() {
+//  cmd := exec.Command("go", "env", "GOPATH")
+//  out, err := cmd.CombinedOutput()
+//  if err != nil {
+//      log.Fatal("Could not read environment")
+//  }
+//  gopath = string(out)
+//  //	os.Setenv("PATH", filepath.Join(strings.TrimSpace(string(out)), "bin")+":"+os.Getenv("PATH"))
+// }
 
 // getContext returns a "context" object containing all the information needed to perform most
 // test tasks. Methods on the context object can be used to implement integration tests and manage
@@ -68,9 +71,8 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 		tmpDir:  tmpDir,
 		testDir: getTestDir(t),
 	}
-	homedir := os.Getenv("HOME")
 	log.Info("Installing kind...")
-	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "HOME="+homedir)}, "go", "get", "sigs.k8s.io/kind@v0.9.0")
+	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "GOPATH="+tmpDir, "HOME="+tmpDir), Stdout: os.Stdout, Stderr: os.Stderr}, "go", "get", "sigs.k8s.io/kind@v0.9.0")
 	log.Info("Installing clusterctl...")
 	for {
 		fetchCmd := fmt.Sprintf("curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.8/clusterctl-%s-%s -o %s/clusterctl && chmod a+x %s/clusterctl",
@@ -83,8 +85,9 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 	}
 	err := os.Setenv("HOME", c.tmpDir)
 	require.NoError(c.t, err)
-	c.run("kind", "delete", "cluster")
-	c.runAndCheckError("kind", "create", "cluster")
+	kindCmd := filepath.Join(c.tmpDir, "bin", "kind")
+	c.run(kindCmd, "delete", "cluster")
+	c.runAndCheckError(kindCmd, "create", "cluster")
 	return c
 }
 
@@ -92,7 +95,7 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 func (c *context) cleanup() {
 	log.Infof("About to remove temp dir: '%s'", c.tmpDir)
 	os.RemoveAll(c.tmpDir)
-	c.runAndCheckError("kind", "delete", "cluster")
+	c.runAndCheckError(filepath.Join(c.tmpDir, "bin", "kind"), "delete", "cluster")
 }
 
 // Determine the current OS
@@ -178,6 +181,9 @@ func (c *context) runWithConfig(config commandConfig, cmdItems ...string) {
 	cmd.Env = config.Env
 	err := cmd.Run()
 	if config.CheckError {
+		if err != nil {
+			log.Errorf("Run error: %v", err)
+		}
 		require.NoError(c.t, err)
 	}
 }
