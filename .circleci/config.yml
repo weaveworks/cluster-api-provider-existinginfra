@@ -70,7 +70,6 @@ jobs:
             make test
   integration-tests:
     <<: *defaults
-    working_directory: /home/circleci/src/github.com/weaveworks/cluster-api-provider-existinginfra
     steps:
       - checkout
       - run:
@@ -85,6 +84,7 @@ jobs:
           name: Run integration tests
           command: |
             go version
+            echo 'PWD:' $PWD
             cd test/integration/test
             go test --timeout=99999s
   release:
