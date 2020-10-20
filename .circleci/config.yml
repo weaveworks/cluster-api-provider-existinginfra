@@ -92,7 +92,6 @@ jobs:
             IMAGE_TAG=$(./tools/image-tag)
             EXISTINGINFRA_CONTROLLER_IMAGE="weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}"
             go version
-            echo 'PWD:' $PWD
             cd test/integration/test
             go test --timeout=99999s
           no_output_timeout: 30m
