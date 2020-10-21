@@ -19,6 +19,7 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
+	github.com/weaveworks/footloose v0.0.0-20200918140536-ff126705213e // indirect
 	github.com/weaveworks/libgitops v0.0.2
 	golang.org/x/build v0.0.0-20190927031335-2835ba2e683f
 	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073

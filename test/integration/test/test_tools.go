@@ -61,6 +61,11 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 	log.Info("Installing kind...")
 	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "HOME="+tmpDir, "CGO_ENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
 		"go", "get", "sigs.k8s.io/kind@v0.9.0")
+
+	log.Info("Installing footloose...")
+	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "HOME="+tmpDir, "CGO_ENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
+		"go", "get", "github.com/weaveworks/footloose")
+
 	log.Info("Installing clusterctl...")
 	for {
 		fetchCmd := fmt.Sprintf("curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.8/clusterctl-%s-%s -o %s/clusterctl && chmod a+x %s/clusterctl",
@@ -82,8 +87,8 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 // Clean everything up; remove temp directory and delete kind cluster
 func (c *context) cleanup() {
 	log.Infof("About to remove temp dir: '%s'", c.tmpDir)
-	os.RemoveAll(c.tmpDir)
 	c.runAndCheckError(filepath.Join(c.tmpDir, "go", "bin", "kind"), "delete", "cluster")
+	os.RemoveAll(c.tmpDir)
 }
 
 // Determine the current OS

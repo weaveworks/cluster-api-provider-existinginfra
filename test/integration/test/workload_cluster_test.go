@@ -286,7 +286,7 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 	err := ioutil.WriteFile(configPath, []byte(footlooseConfig), 0600)
 	require.NoError(c.t, err)
 	key := createKey(c)
-	c.runWithConfig(commandConfig{CheckError: true, Dir: c.tmpDir}, "footloose", "create")
+	c.runWithConfig(commandConfig{CheckError: true, Dir: c.tmpDir}, filepath.Join(c.tmpDir, "go", "bin", "footloose"), "create")
 	return []capeios.MachineInfo{
 		{
 			SSHUser:    "root",
@@ -313,7 +313,7 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 
 // Delete the machines underpinning the workload cluster
 func deleteFootlooseMachines(c *context) {
-	c.runWithConfig(commandConfig{Dir: c.tmpDir}, "footloose", "delete")
+	c.runWithConfig(commandConfig{Dir: c.tmpDir}, filepath.Join(c.tmpDir, "go", "bin", "footloose"), "delete")
 }
 
 // Create an SSH key for the footloose machines
