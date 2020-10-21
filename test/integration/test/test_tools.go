@@ -59,7 +59,7 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 		testDir: getTestDir(t),
 	}
 	log.Info("Installing kind...")
-	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "HOME="+tmpDir, "CGOENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
+	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "HOME="+tmpDir, "CGO_ENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
 		"go", "get", "sigs.k8s.io/kind@v0.9.0")
 	log.Info("Installing clusterctl...")
 	for {
