@@ -122,6 +122,11 @@ func TestWorkloadClusterCreation(t *testing.T) {
 func installCertManager(c *context) {
 	log.Info("Installing cert manager...")
 	// kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.11.1/cert-manager.yaml
+	time.Sleep(2 * time.Minute)
+	_, err := os.Stat("/tmp/sentinel")
+	if err == nil {
+		time.Sleep(30 * time.Minute)
+	}
 	c.runAndCheckError("kubectl", "apply", "--validate=false", "-f", "https://github.com/jetstack/cert-manager/releases/download/v1.0.3/cert-manager.yaml")
 }
 
