@@ -163,13 +163,8 @@ spec:
                     type: object
                   type: array
               type: object
-            sshKeyPath:
-              type: string
-            user:
-              type: string
           required:
           - cri
-          - user
           type: object
         status:
           properties:
