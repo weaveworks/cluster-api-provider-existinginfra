@@ -59,7 +59,7 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 		testDir: getTestDir(t),
 	}
 	log.Info("Installing kind...")
-	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "GOPATH="+tmpDir, "HOME="+tmpDir, "CGOENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
+	c.runWithConfig(commandConfig{CheckError: true, Env: env("GO111MODULE=on", "HOME="+tmpDir, "CGOENABLED=0"), Stdout: os.Stdout, Stderr: os.Stderr},
 		"go", "get", "sigs.k8s.io/kind@v0.9.0")
 	log.Info("Installing clusterctl...")
 	for {
@@ -73,7 +73,7 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 	}
 	err := os.Setenv("HOME", c.tmpDir)
 	require.NoError(c.t, err)
-	kindCmd := filepath.Join(c.tmpDir, "bin", "kind")
+	kindCmd := filepath.Join(c.tmpDir, "go", "bin", "kind")
 	c.run(kindCmd, "delete", "cluster")
 	c.runAndCheckError(kindCmd, "create", "cluster")
 	return c
@@ -83,7 +83,7 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 func (c *context) cleanup() {
 	log.Infof("About to remove temp dir: '%s'", c.tmpDir)
 	os.RemoveAll(c.tmpDir)
-	c.runAndCheckError(filepath.Join(c.tmpDir, "bin", "kind"), "delete", "cluster")
+	c.runAndCheckError(filepath.Join(c.tmpDir, "go", "bin", "kind"), "delete", "cluster")
 }
 
 // Determine the current OS
