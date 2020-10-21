@@ -197,7 +197,7 @@ func ensureAllWorkloadNodesAreRunning(c *context) {
 func getWorkloadKubeconfig(c *context) string {
 	var configBytes []byte
 	for {
-		localConfigBytes, _, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
+		localConfigBytes, eout, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
 			"-o", "StrictHostKeyChecking=no", "-p", "2222", "127.0.0.1", "cat", "/etc/kubernetes/admin.conf")
 		if err == nil {
 			log.Info("Got kubeconfig for workload cluster...")
@@ -209,6 +209,8 @@ func getWorkloadKubeconfig(c *context) string {
 			config.Clusters[0].Cluster.CertificateAuthorityData = nil
 			configBytes, err = yaml.Marshal(config)
 			break
+		} else {
+			log.Infof("Attempted to retrieve kubeconfig: %s -- error: %v", eout, err)
 		}
 		time.Sleep(30 * time.Second)
 	}
