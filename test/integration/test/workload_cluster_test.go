@@ -211,6 +211,7 @@ func getWorkloadKubeconfig(c *context) string {
 			break
 		} else {
 			log.Infof("Attempted to retrieve kubeconfig: %s -- error: %v", eout, err)
+			c.run("sh", "-c", "kubectl logs $(kubectl get pods -A | grep wks-controller | awk '{print($2)}') -n weavek8sops")
 		}
 		time.Sleep(30 * time.Second)
 	}
