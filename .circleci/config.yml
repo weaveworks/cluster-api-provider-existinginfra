@@ -59,6 +59,7 @@ jobs:
           name: Install kubectl
           command: |
             curl -L $KUBECTL_URL -o kubectl.tar.gz
+            echo URL: $KUBECTL_URL CHECKSUM: $KUBECTL_CHECKSUM NEWCSUM: $(sha256sum kubectl.tar.gz)
             echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
             tar xvzf kubectl.tar.gz --strip-components=3
             sudo mv kubectl /usr/local/bin
