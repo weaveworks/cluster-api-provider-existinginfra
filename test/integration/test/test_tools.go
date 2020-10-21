@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -68,7 +69,7 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 
 	log.Info("Installing clusterctl...")
 	for {
-		fetchCmd := fmt.Sprintf("curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.8/clusterctl-%s-%s -o %s/clusterctl && chmod a+x %s/clusterctl",
+		fetchCmd := fmt.Sprintf("curl -L https://github.com/kubernetes-sigs/cluster-api/releases/download/v0.3.10/clusterctl-%s-%s -o %s/clusterctl && chmod a+x %s/clusterctl",
 			c.getOS(), c.getArch(), c.tmpDir, c.tmpDir)
 		c.runAndCheckError("sh", "-c", fetchCmd)
 		_, _, err := c.runCollectingOutput(filepath.Join(c.tmpDir, "clusterctl"), "version")
@@ -196,6 +197,48 @@ func (c *context) runCollectingOutputWithConfig(config commandConfig, cmdItems .
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	return stdout.Bytes(), stderr.Bytes(), err
+}
+
+// Check that a specified number of a resource type is running
+func (c *context) ensureCount(itemType string, count int, kubeconfigPath string) {
+	for retryCount := 1; retryCount <= 20; retryCount++ {
+		cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "--no-headers=true"}
+		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
+		require.NoError(c.t, err)
+		if len(strings.Split(string(cmdResults), "\n")) > count { // Must be "count+1" because of ending blank line
+			return
+		}
+		log.Infof("Waiting for %d %s, retry: %d...", count, itemType, retryCount)
+		c.runWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)},
+			"sh", "-c", "kubectl logs -f $(kubectl get pods -A | grep wks-controller | awk '{print($2)}') -n test")
+		time.Sleep(30 * time.Second)
+	}
+	require.FailNow(c.t, fmt.Sprintf("Fewer than %d %s are running...", count, itemType))
+}
+
+// Check that each instance of a specified resource type is ready
+func (c *context) ensureRunning(itemType, kubeconfigPath string) {
+	cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "-o",
+		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
+
+	for retryCount := 1; retryCount <= 20; retryCount++ {
+		allReady := true
+		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
+		require.NoError(c.t, err)
+		strs := strings.Split(string(cmdResults), "\n")
+		for _, str := range strs {
+			if str != "" && !strings.Contains(str, "Ready=True") {
+				log.Infof("Waiting for: %s", str)
+				allReady = false
+			}
+		}
+		if allReady {
+			return
+		}
+		log.Infof("Waiting for all %s to be running, retry: %d...", itemType, retryCount)
+		time.Sleep(30 * time.Second)
+	}
+	require.FailNow(c.t, fmt.Sprintf("Not all %s are running...", itemType))
 }
 
 // Determine if the temporary directory exists
