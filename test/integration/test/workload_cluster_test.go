@@ -126,11 +126,7 @@ func installCertManager(c *context) {
 }
 
 func setupNetworking(c *context) {
-	// c.run("docker", "network", "rm", "workload")
-	// c.runAndCheckError("docker", "network", "create", "--driver", "bridge", "workload")
 	c.runAndCheckError("docker", "network", "connect", "bridge", "kind-control-plane")
-	// c.runAndCheckError("docker", "network", "connect", "workload", "centos-singlemaster-node0")
-	// c.runAndCheckError("docker", "network", "connect", "workload", "centos-singlemaster-node1")
 }
 
 // Copy in the existinginfra local-repository and set up configuration to point to it
@@ -201,7 +197,6 @@ func getWorkloadKubeconfig(c *context) string {
 	for {
 		localConfigBytes, eout, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
 			"-o", "StrictHostKeyChecking=no", "-p", "2222", "127.0.0.1", "cat", "/etc/kubernetes/admin.conf")
-		log.Infof("LCB: %s, EOUT: %s, ERR: %v", localConfigBytes, eout, err)
 		if err == nil {
 			log.Info("Got kubeconfig for workload cluster...")
 			configBytes = bytes.Replace(localConfigBytes, []byte("172.17.0.2"), []byte("127.0.0.1"), 1)
@@ -281,7 +276,7 @@ func createWorkloadCluster(c *context, version string) {
 func createFootlooseMachines(c *context) []capeios.MachineInfo {
 	// First, make sure we're clean
 	c.runWithConfig(commandConfig{}, "docker", "rm", "-f", "centos-singlemaster-node0", "centos-singlemaster-node1")
-	log.Info("Creating footloose cluster...")
+	log.Info("Creating footloose machines...")
 	configPath := filepath.Join(c.tmpDir, "footloose.yaml")
 	err := ioutil.WriteFile(configPath, []byte(footlooseConfig), 0600)
 	require.NoError(c.t, err)
@@ -289,22 +284,20 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 	c.runWithConfig(commandConfig{CheckError: true, Dir: c.tmpDir}, filepath.Join(c.tmpDir, "go", "bin", "footloose"), "create")
 	return []capeios.MachineInfo{
 		{
-			SSHUser:    "root",
-			SSHKey:     key,
-			PublicIP:   "172.17.0.2",
-			PublicPort: "22",
-			// PublicIP:    "127.0.0.1",
-			// PublicPort:  "2222",
+			SSHUser: "root",
+			SSHKey:  key,
+			// Use private address for public since we're using footloose machines
+			// from docker
+			PublicIP:    "172.17.0.2",
+			PublicPort:  "22",
 			PrivateIP:   "172.17.0.2",
 			PrivatePort: "22",
 		},
 		{
-			SSHUser:    "root",
-			SSHKey:     key,
-			PublicIP:   "172.17.0.3",
-			PublicPort: "22",
-			// PublicIP:    "127.0.0.1",
-			// PublicPort:  "2223",
+			SSHUser:     "root",
+			SSHKey:      key,
+			PublicIP:    "172.17.0.3",
+			PublicPort:  "22",
 			PrivateIP:   "172.17.0.3",
 			PrivatePort: "22",
 		},
