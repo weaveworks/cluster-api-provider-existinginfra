@@ -78,6 +78,8 @@ jobs:
             go version
             make test
   integration-tests:
+    requires:
+      - build
     machine:
       image: ubuntu-1604:202004-01
     environment:
