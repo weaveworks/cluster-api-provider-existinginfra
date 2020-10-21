@@ -8,7 +8,7 @@ defaults: &defaults
         GOPATH: /go/
         SRCDIR: /src/github.com/weaveworks/wksctl
         KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
-        KUBECTL_CHECKSUM: da9d557989a0b9671a610f21642052febb8f70c3cf144c98a8a4f7ecab6bafe2
+        KUBECTL_CHECKSUM: 7d884e2c5724ce9adba23e71a0488379afac9ed91e3c35d0f0fec1fad2597094
   working_directory: /src/github.com/weaveworks/cluster-api-provider-existinginfra
 
 workflows:
