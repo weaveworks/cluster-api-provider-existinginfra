@@ -122,11 +122,6 @@ func TestWorkloadClusterCreation(t *testing.T) {
 func installCertManager(c *context) {
 	log.Info("Installing cert manager...")
 	// kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.11.1/cert-manager.yaml
-	time.Sleep(2 * time.Minute)
-	_, err := os.Stat("/tmp/sentinel")
-	if err == nil {
-		time.Sleep(30 * time.Minute)
-	}
 	c.runAndCheckError("kubectl", "apply", "--validate=false", "-f", "https://github.com/jetstack/cert-manager/releases/download/v1.0.3/cert-manager.yaml")
 }
 
@@ -155,7 +150,7 @@ func setupProviderRepository(c *context) {
 
 func installProvider(c *context) {
 	log.Info("Installing existinginfra provider...")
-	c.runAndCheckError("clusterctl", "init", "--infrastructure=existinginfra")
+	c.runAndCheckError(filepath.Join(c.tmpDir, "clusterctl"), "init", "--infrastructure=existinginfra")
 }
 
 func installNamespace(c *context) {
@@ -268,7 +263,7 @@ func ensureRunning(c *context, itemType, kubeconfigPath string) {
 // Apply the generated cluster manifest to trigger workload cluster creation
 func createWorkloadCluster(c *context, version string) {
 	log.Info("Creating workload cluster...")
-	manifest, eout, err := c.runCollectingOutput(fmt.Sprintf("%s/clusterctl", c.tmpDir), "config", "cluster", "test-cluster", "--kubernetes-version", version, "-n", "test")
+	manifest, eout, err := c.runCollectingOutput(filepath.Join(c.tmpDir, "clusterctl"), "config", "cluster", "test-cluster", "--kubernetes-version", version, "-n", "test")
 	if err != nil {
 		log.Infof("Error out: %s, err: %#v", eout, err)
 	}
