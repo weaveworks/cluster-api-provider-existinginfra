@@ -195,7 +195,7 @@ func ensureAllWorkloadNodesAreRunning(c *context) {
 func getWorkloadKubeconfig(c *context) string {
 	var configBytes []byte
 	for {
-		localConfigBytes, eout, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
+		localConfigBytes, _, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
 			"-o", "StrictHostKeyChecking=no", "-p", "2222", "127.0.0.1", "cat", "/etc/kubernetes/admin.conf")
 		if err == nil {
 			log.Info("Got kubeconfig for workload cluster...")
@@ -222,8 +222,7 @@ func getWorkloadKubeconfig(c *context) string {
 func ensureCount(c *context, itemType string, count int, kubeconfigPath string) {
 	for retryCount := 1; retryCount <= 20; retryCount++ {
 		cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "--no-headers=true"}
-		cmdResults, eout, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
-		fmt.Printf("%s\n%s\n", cmdResults, eout)
+		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		require.NoError(c.t, err)
 		if len(strings.Split(string(cmdResults), "\n")) > count { // Must be "count+1" because of ending blank line
 			return
