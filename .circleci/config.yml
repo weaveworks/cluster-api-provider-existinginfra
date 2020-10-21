@@ -9,7 +9,12 @@ defaults: &defaults
         SRCDIR: /src/github.com/weaveworks/wksctl
         KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
         KUBECTL_CHECKSUM: 2096615904534a381d02ec15d62fe4e7fb80ef0d8e5fcfee2e71ba94771adfab
-  working_directory: /src/github.com/weaveworks/cluster-api-provider-existinginfra
+  working_directory: /home/circleci/src/github.com/weaveworks/cluster-api-provider-existinginfra
+
+integrationTestCommonEnv: &integrationTestCommonEnv
+  SRCDIR: /src/github.com/weaveworks/wks
+  KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
+  KUBECTL_CHECKSUM: 2096615904534a381d02ec15d62fe4e7fb80ef0d8e5fcfee2e71ba94771adfab
 
 workflows:
   version: 2
@@ -71,11 +76,9 @@ jobs:
   integration-tests:
     machine:
       image: ubuntu-1604:202004-01
-      environment:
-        GOPATH: /go/
-        SRCDIR: /src/github.com/weaveworks/wksctl
-        KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
-        KUBECTL_CHECKSUM: 2096615904534a381d02ec15d62fe4e7fb80ef0d8e5fcfee2e71ba94771adfab
+    environment:
+      <<: *integrationTestCommonEnv
+    working_directory: /home/circleci/src/github.com/weaveworks/cluster-api-provider-existinginfra
     steps:
       - checkout
       - run:
