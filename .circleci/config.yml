@@ -85,7 +85,6 @@ jobs:
             echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
             tar xvzf kubectl.tar.gz --strip-components=3
             sudo mv kubectl /usr/local/bin
-
       - run:
           name: Run integration tests
           command: |
