@@ -8,7 +8,7 @@ defaults: &defaults
         GOPATH: /go/
         SRCDIR: /src/github.com/weaveworks/wksctl
         KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
-        KUBECTL_CHECKSUM: da9d557989a0b9671a610f21642052febb8f70c3cf144c98a8a4f7ecab6bafe2
+        KUBECTL_CHECKSUM: 7d884e2c5724ce9adba23e71a0488379afac9ed91e3c35d0f0fec1fad2597094
   working_directory: /src/github.com/weaveworks/cluster-api-provider-existinginfra
 
 workflows:
@@ -59,6 +59,7 @@ jobs:
           name: Install kubectl
           command: |
             curl -L $KUBECTL_URL -o kubectl.tar.gz
+            echo URL: $KUBECTL_URL CHECKSUM: $KUBECTL_CHECKSUM NEWCSUM: $(sha256sum kubectl.tar.gz)
             echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
             tar xvzf kubectl.tar.gz --strip-components=3
             sudo mv kubectl /usr/local/bin
