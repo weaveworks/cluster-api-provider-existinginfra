@@ -70,9 +70,10 @@ jobs:
             make test
   integration-tests:
     <<: *defaults
+    machine:
+      image: ubuntu-1604:202004-01
     steps:
       - checkout
-      - setup_remote_docker
       - run:
           name: Install kubectl
           command: |
