@@ -250,7 +250,7 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 	return []capeios.MachineInfo{
 		{
 			SSHUser: "root",
-			SSHKey:  key,
+			SSHKey:  base64.StdEncoding.EncodeToString(key),
 			// Use private address for public since we're using footloose machines
 			// from docker
 			PublicIP:    "172.17.0.2",
@@ -260,7 +260,7 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 		},
 		{
 			SSHUser:     "root",
-			SSHKey:      alternateKey,
+			SSHKey:      base64.StdEncoding.EncodeToString(alternateKey),
 			PublicIP:    "172.17.0.3",
 			PublicPort:  "22",
 			PrivateIP:   "172.17.0.3",
@@ -275,11 +275,11 @@ func deleteFootlooseMachines(c *context) {
 }
 
 // Create an SSH key for the footloose machines
-func createKey(c *context, keyFileName string) string {
+func createKey(c *context, keyFileName string) []byte {
 	// ssh-keygen -q -t rsa -b 4096 -C wk-quickstart@weave.works -f cluster-key -N ""
 	path := filepath.Join(c.tmpDir, keyFileName)
 	c.runAndCheckError("ssh-keygen", "-q", "-t", "rsa", "-b", "4096", "-C", "wk-quickstart@weave.works", "-f", path, "-N", "")
 	key, err := ioutil.ReadFile(path)
 	require.NoError(c.t, err)
-	return base64.StdEncoding.EncodeToString(key)
+	return key
 }
