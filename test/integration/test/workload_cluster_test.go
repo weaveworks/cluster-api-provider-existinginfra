@@ -196,8 +196,8 @@ func ensureAllWorkloadNodesAreRunning(c *context) {
 // Get the configuration for the workload cluster
 func getWorkloadKubeconfig(c *context) string {
 	var configBytes []byte
-	for {
-		localConfigBytes, eout, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
+	for retryCount := 1; retryCount <= 30; retryCount++ {
+		localConfigBytes, _, err := c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root", "-o", "UserKnownHostsFile /dev/null",
 			"-o", "StrictHostKeyChecking=no", "-p", "2222", "127.0.0.1", "cat", "/etc/kubernetes/admin.conf")
 		if err == nil {
 			log.Info("Got kubeconfig for workload cluster...")
@@ -210,8 +210,7 @@ func getWorkloadKubeconfig(c *context) string {
 			configBytes, err = yaml.Marshal(config)
 			break
 		} else {
-			log.Infof("Attempted to retrieve kubeconfig: %s -- error: %v", eout, err)
-			c.run("sh", "-c", "kubectl logs $(kubectl get pods -A | grep wks-controller | awk '{print($2)}') -n weavek8sops")
+			log.Infof("Waiting for kubeconfig to be created, retry: %d...", retryCount)
 		}
 		time.Sleep(30 * time.Second)
 	}
