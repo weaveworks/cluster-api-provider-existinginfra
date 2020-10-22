@@ -241,12 +241,12 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 	configPath := filepath.Join(c.tmpDir, "footloose.yaml")
 	err := ioutil.WriteFile(configPath, []byte(footlooseConfig), 0600)
 	require.NoError(c.t, err)
-	key := createKey(c, "cluster-key")
-	alternateKey := createKey(c, "alternate-key") // Different key for second machine - we'll add it to authorized_keys
+	key, _ := createKey(c, "cluster-key")
+	alternatePrivateKey, alternatePublicKey := createKey(c, "alternate-key") // Different key for second machine - we'll add it to authorized_keys
 	c.runWithConfig(commandConfig{CheckError: true, Dir: c.tmpDir}, filepath.Join(c.tmpDir, "go", "bin", "footloose"), "create")
 	c.runAndCheckError("sh", "-c",
 		fmt.Sprintf("echo '%s' | ssh -i %s -l root -o 'UserKnownHostsFile /dev/null' -o 'StrictHostKeyChecking=no' -p 2223 127.0.0.1 'cat >> /root/.ssh/authorized_keys'",
-			alternateKey, filepath.Join(c.tmpDir, "cluster-key")))
+			alternatePublicKey, filepath.Join(c.tmpDir, "cluster-key")))
 	return []capeios.MachineInfo{
 		{
 			SSHUser: "root",
@@ -260,7 +260,7 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 		},
 		{
 			SSHUser:     "root",
-			SSHKey:      base64.StdEncoding.EncodeToString(alternateKey),
+			SSHKey:      base64.StdEncoding.EncodeToString(alternatePrivateKey),
 			PublicIP:    "172.17.0.3",
 			PublicPort:  "22",
 			PrivateIP:   "172.17.0.3",
@@ -275,11 +275,12 @@ func deleteFootlooseMachines(c *context) {
 }
 
 // Create an SSH key for the footloose machines
-func createKey(c *context, keyFileName string) []byte {
+func createKey(c *context, keyFileName string) ([]byte, []byte) {
 	// ssh-keygen -q -t rsa -b 4096 -C wk-quickstart@weave.works -f cluster-key -N ""
 	path := filepath.Join(c.tmpDir, keyFileName)
 	c.runAndCheckError("ssh-keygen", "-q", "-t", "rsa", "-b", "4096", "-C", "wk-quickstart@weave.works", "-f", path, "-N", "")
-	key, err := ioutil.ReadFile(path)
+	privateKey, err := ioutil.ReadFile(path)
 	require.NoError(c.t, err)
-	return key
+	publicKey, err := ioutil.ReadFile(path + ".pub")
+	return privateKey, publicKey
 }
