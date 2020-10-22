@@ -26,11 +26,14 @@ type Params struct {
 
 // Drain drains the provided node.
 func Drain(node *corev1.Node, clientSet kubernetes.Interface, params Params) error {
+	drainLog := log.StandardLogger().Writer()
+	defer drainLog.Close()
 	drainer := &drain.Helper{
 		Client:              clientSet,
 		Force:               params.Force,
 		DeleteLocalData:     params.DeleteLocalData,
 		IgnoreAllDaemonSets: params.IgnoreAllDaemonSets,
+		Out:                 drainLog,
 	}
 	policyGroupVersion, err := drain.CheckEvictionSupport(clientSet)
 	if err != nil {
