@@ -398,28 +398,34 @@ func addSealedSecretWaitIfNecessary(b *plan.Builder, key, cert string) string {
 }
 
 func addSealedSecretResourcesIfNecessary(b *plan.Builder, kubectlApplyDeps []string, pemSecretResources map[string]*SecretResourceSpec, sealedSecretVersion, key, cert, ns string) ([]string, error) {
+	log.Info("sealedSecretResources...")
 	if key != "" && cert != "" {
 		keyManifest, err := createSealedSecretKeySecretManifest(key, cert, ns)
 		if err != nil {
 			return nil, err
 		}
+		log.Info("sealedSecretResources -- created sealed secret key manifest...")
 		crdManifest, err := sealedSecretCRDManifest(ns)
 		if err != nil {
 			return nil, err
 		}
+		log.Info("sealedSecretResources -- created sealed secret crd manifest...")
 		controllerManifest, err := sealedSecretControllerManifest(ns)
 		if err != nil {
 			return nil, err
 		}
+		log.Info("sealedSecretResources -- created sealed secret controller manifest...")
 
 		sealedSecretRsc := recipe.BuildSealedSecretPlan(sealedSecretVersion, ns, crdManifest,
 			keyManifest, controllerManifest)
 		b.AddResource("install:sealed-secrets", sealedSecretRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
+		log.Info("sealedSecretResources -- created sealed secret plan...")
 
 		// Now that the cluster is up, if auth is configured, create a secret containing the data for use by the machine actuator
 		for _, resourceSpec := range pemSecretResources {
 			b.AddResource(fmt.Sprintf("install:pem-secret-%s", resourceSpec.SecretName), resourceSpec.Resource, plan.DependOn("install:sealed-secrets"))
 		}
+		log.Info("sealedSecretResources -- created pem resources...")
 		return []string{"install:sealed-secrets"}, nil
 	}
 	return kubectlApplyDeps, nil
