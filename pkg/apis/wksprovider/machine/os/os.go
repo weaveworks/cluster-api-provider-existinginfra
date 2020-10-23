@@ -400,23 +400,13 @@ func addSealedSecretWaitIfNecessary(b *plan.Builder, key, cert string) string {
 func addSealedSecretResourcesIfNecessary(b *plan.Builder, kubectlApplyDeps []string, pemSecretResources map[string]*SecretResourceSpec, sealedSecretVersion, key, cert, ns string) ([]string, error) {
 	log.Info("sealedSecretResources...")
 	if key != "" && cert != "" {
-		keyManifest, err := createSealedSecretKeySecretManifest(key, cert, ns)
+		keyManifest, err := createSealedSecretKeySecretManifest(key, cert)
 		if err != nil {
 			return nil, err
 		}
-		log.Info("sealedSecretResources -- created sealed secret key manifest...")
-		crdManifest, err := sealedSecretCRDManifest(ns)
-		if err != nil {
-			return nil, err
-		}
-		log.Info("sealedSecretResources -- created sealed secret crd manifest...")
-		controllerManifest, err := sealedSecretControllerManifest(ns)
-		if err != nil {
-			return nil, err
-		}
-		log.Info("sealedSecretResources -- created sealed secret controller manifest...")
-
-		sealedSecretRsc := recipe.BuildSealedSecretPlan(sealedSecretVersion, ns, crdManifest,
+		crdManifest := sealedSecretCRDManifest()
+		controllerManifest := sealedSecretControllerManifest()
+		sealedSecretRsc := recipe.BuildSealedSecretPlan([]byte(sealedSecretVersion), crdManifest,
 			keyManifest, controllerManifest)
 		b.AddResource("install:sealed-secrets", sealedSecretRsc, plan.DependOn(kubectlApplyDeps[0], kubectlApplyDeps[1:]...))
 		log.Info("sealedSecretResources -- created sealed secret plan...")
@@ -431,7 +421,7 @@ func addSealedSecretResourcesIfNecessary(b *plan.Builder, kubectlApplyDeps []str
 	return kubectlApplyDeps, nil
 }
 
-func createSealedSecretKeySecretManifest(privateKey, cert, ns string) ([]byte, error) {
+func createSealedSecretKeySecretManifest(privateKey, cert string) ([]byte, error) {
 	secret := &v1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: sealedSecretKeySecretName, Namespace: "kube-system"},
@@ -477,12 +467,12 @@ func wksControllerManifest(controller ControllerParams, namespace string) ([]byt
 	return UpdateControllerImage(content, controller.ImageOverride)
 }
 
-func sealedSecretCRDManifest(namespace string) ([]byte, error) {
-	return getManifest(sealedSecretCRDManifestString, namespace)
+func sealedSecretCRDManifest() []byte {
+	return sealedSecretCRDManifestString
 }
 
-func sealedSecretControllerManifest(namespace string) ([]byte, error) {
-	return getManifest(sealedSecretControllerManifestString, namespace)
+func sealedSecretControllerManifest() []byte {
+	return sealedSecretControllerManifestString
 }
 
 func getManifest(manifestString, namespace string) ([]byte, error) {
@@ -1175,7 +1165,7 @@ spec:
             memory: 20Mi
 `
 
-const sealedSecretCRDManifestString = `apiVersion: apiextensions.k8s.io/v1beta1
+var sealedSecretCRDManifestString = []byte(`apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   name: sealedsecrets.bitnami.com
@@ -1188,9 +1178,9 @@ spec:
     singular: sealedsecret
   scope: Namespaced
   version: v1alpha1
-`
+`)
 
-const sealedSecretControllerManifestString = `apiVersion: v1
+var sealedSecretControllerManifestString = []byte(`apiVersion: v1
 kind: Service
 metadata:
   annotations: {}
@@ -1407,7 +1397,7 @@ rules:
   verbs:
   - create
   - get
-`
+`)
 
 const fluxManifestTemplate = `apiVersion: v1
 items:
