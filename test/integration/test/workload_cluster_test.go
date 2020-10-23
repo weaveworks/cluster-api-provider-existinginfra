@@ -93,9 +93,6 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	// Set up a docker network for communication
 	setupNetworking(c)
 
-	// // Install the cert manager before installing our provicer
-	// installCertManager(c)
-
 	// Let cluster stabilize
 	ensureAllManagementPodsAreRunning(c)
 
