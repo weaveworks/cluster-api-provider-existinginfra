@@ -57,6 +57,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -158,6 +159,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 
 	// Object still there but with deletion timestamp => run our finalizer
 	if !eim.ObjectMeta.DeletionTimestamp.IsZero() {
+		controllerutil.RemoveFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
 		err := r.delete(ctx, eic, machine, eim)
 		if err != nil {
 			contextLog.Errorf("failed to delete machine: %v", err)
@@ -408,7 +410,15 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	addr := a.getMachineAddress(eim)
 	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
-		if apierrs.IsNotFound(err) { // isn't there; try to create it
+		if apierrs.IsNotFound(err) {
+			// isn't there; try to create it
+
+			// Since ExistingInfra controller handles boostrapping, add the
+			// finalizer here to ensure we cleanup no delete
+			controllerutil.AddFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
+			if err := a.Client.Update(ctx, eim); err != nil {
+				return err
+			}
 			return a.create(ctx, installer, c, machine, eim)
 		}
 		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
