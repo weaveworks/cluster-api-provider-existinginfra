@@ -68,6 +68,12 @@ type EndPoint struct {
 	Port    uint16 `json:"port"`
 }
 
+const (
+	// MachineFinalizer allows ReconcileExistingInfraMachine to clean up before
+	// removing it from the apiserver.
+	ExistingInfraMachineFinalizer = "existinginframachine.cluster.weave.works"
+)
+
 func init() {
 	SchemeBuilder.Register(&ExistingInfraMachine{}, &ExistingInfraMachineList{})
 }
