@@ -334,7 +334,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 	}
 	log.Info("Got seed node plan")
 
-	b.AddResource("node:plan", &resource.KubectlAnnotateSingleNode{Key: recipe.PlanKey, Value: seedNodePlan.ToJSON()}, plan.DependOn("kubeadm:init"))
+	b.AddResource("node:plan", &resource.KubectlAnnotateSingleNode{Key: recipe.PlanKey, Value: seedNodePlan.ToState().ToJSON()}, plan.DependOn("kubeadm:init"))
 
 	if params.AuthInfo != nil {
 		addAuthConfigMapIfNecessary(configMapManifests, params.AuthInfo.AuthConfigManifest)
