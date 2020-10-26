@@ -1106,7 +1106,7 @@ const wksControllerManifestString = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: wks-controller
-  namespace: system
+  namespace: weavek8sops
   labels:
     name: wks-controller
     control-plane: wks-controller
