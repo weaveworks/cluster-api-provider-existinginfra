@@ -242,10 +242,26 @@ func (a *ExistingInfraMachineReconciler) getMachineInfo(ctx context.Context, pri
 	if err := json.Unmarshal(pool, &info); err != nil {
 		return os.MachineInfo{}, gerrors.Wrap(err, "failed to unmarshal secret")
 	}
-	for _, m := range info {
+	return a.getMachineInfoOrUseDefault(ctx, &info, privateAddress)
+}
+
+func (a *ExistingInfraMachineReconciler) getMachineInfoOrUseDefault(ctx context.Context, mi *[]os.MachineInfo, privateAddress string) (os.MachineInfo, error) {
+	type infoKey struct {
+		u string
+		p string
+	}
+	uniqInfos := make(map[infoKey]interface{})
+	for _, m := range *mi {
 		if m.PrivateIP == privateAddress {
 			return m, nil
 		}
+		uniqInfos[infoKey{u: m.SSHUser, p: m.SSHKey}] = nil
+	}
+	// if we don't find a user/key for this private IP and all of the entries are the same,
+	// return the first one
+	// TODO: Add an info for this private address
+	if len(uniqInfos) == 1 {
+		return (*mi)[0], nil
 	}
 	return os.MachineInfo{}, fmt.Errorf("No machine information found for: %s", privateAddress)
 }
