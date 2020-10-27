@@ -1148,10 +1148,10 @@ spec:
       containers:
       - name: controller
         imagePullPolicy: Always
-        image: weaveworks/cluster-api-existinginfra-controller:v0.0.6
+        image: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6
         env:
         - name: EXISTINGINFRA_CONTROLLER_IMAGE
-          value: weaveworks/cluster-api-existinginfra-controller:v0.0.6
+          value: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

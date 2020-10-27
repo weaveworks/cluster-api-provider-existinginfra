@@ -149,7 +149,13 @@ func setupProviderRepository(c *context) {
 
 func installProvider(c *context) {
 	log.Info("Installing existinginfra provider...")
-	c.runAndCheckError(filepath.Join(c.tmpDir, "clusterctl"), "init", "--infrastructure=existinginfra")
+	c.runWithConfig(
+		commandConfig{
+			Env:        getProviderEnvironment(c),
+			Stdout:     os.Stdout,
+			Stderr:     os.Stderr,
+			CheckError: true},
+		filepath.Join(c.tmpDir, "clusterctl"), "init", "--infrastructure=existinginfra")
 }
 
 func installNamespace(c *context) {
@@ -190,6 +196,14 @@ func ensureAllWorkloadNodesAreRunning(c *context) {
 	c.ensureRunning("nodes", workloadKubeconfig)
 }
 
+// Set up a provider-friendly environment
+func getProviderEnvironment(c *context) []string {
+	tag, _, err := c.runCollectingOutput(filepath.Join(c.testDir, "../../../tools/image-tag"))
+	require.NoError(c.t, err)
+	return env("NAMESPACE=test", "CONTROL_PLANE_MACHINE_COUNT=1", "WORKER_MACHINE_COUNT=1", "HOME="+c.tmpDir,
+		"EXISTINGINFRA_CONTROLLER_IMAGE=docker.io/weaveworks/cluster-api-existinginfra-controller:"+string(tag))
+}
+
 // Get the configuration for the workload cluster
 func getWorkloadKubeconfig(c *context) string {
 	var configBytes []byte
@@ -220,9 +234,14 @@ func getWorkloadKubeconfig(c *context) string {
 }
 
 // Apply the generated cluster manifest to trigger workload cluster creation
-func createWorkloadCluster(c *context, version string) {
+func createWorkloadCluster(c *context, vsn string) {
 	log.Info("Creating workload cluster...")
-	manifest, eout, err := c.runCollectingOutput(filepath.Join(c.tmpDir, "clusterctl"), "config", "cluster", "test-cluster", "--kubernetes-version", version, "-n", "test")
+	manifest, eout, err := c.runCollectingOutputWithConfig(
+		commandConfig{
+			Env:    getProviderEnvironment(c),
+			Stdout: os.Stdout,
+			Stderr: os.Stderr},
+		filepath.Join(c.tmpDir, "clusterctl"), "config", "cluster", "test-cluster", "--kubernetes-version", vsn, "-n", "test")
 	if err != nil {
 		log.Infof("Error out: %s, err: %#v", eout, err)
 	}
