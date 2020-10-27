@@ -12,6 +12,14 @@ const (
 	emptyRange = ""
 )
 
+var (
+	// The constants below are to be set by flags passed to `go build`.
+	// Examples: -X version.Version=xxxxx -X version.ImageTag=yyyyy
+
+	Version  = "undefined"
+	ImageTag = "latest"
+)
+
 // MatchesRange parses the provided version and versions range, and checks if
 // the provided version matches the provided range.
 func MatchesRange(version, versionsRange string) (bool, error) {
