@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	ot "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -94,6 +95,8 @@ func (params NodeParams) Validate() error {
 // manifests stored during the initialization of the cluster, when
 // SetupSeedNode was called.
 func (o OS) SetupNode(ctx context.Context, p *plan.Plan) error {
+	span, ctx := ot.StartSpanFromContext(ctx, "OS.SetupNode", ot.Tag{Key: "name", Value: o.Name})
+	defer span.Finish()
 	// We don't know the state of the machine so undo at the beginning
 	//nolint:errcheck
 	p.Undo(ctx, o.Runner, plan.EmptyState) // TODO: Implement error checking
@@ -107,6 +110,8 @@ func (o OS) SetupNode(ctx context.Context, p *plan.Plan) error {
 
 // CreateNodeSetupPlan creates the plan that will be used to set up a node.
 func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.Plan, error) {
+	span, ctx := ot.StartSpanFromContext(ctx, "OS.CreateNodeSetupPlan")
+	defer span.Finish()
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}

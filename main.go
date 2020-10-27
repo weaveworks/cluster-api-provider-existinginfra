@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/tracing"
 
 	baremetalproviderspecv1alpha1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/baremetalproviderspec/v1alpha1"
 	clusterweaveworksv1alpha3 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -77,8 +80,15 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	tracingCloser, err := tracing.SetupJaeger("existingInfra-controller")
+	if err != nil {
+		log.Fatalf("failed to set up Jaeger: %v", err)
+	}
+	defer tracingCloser.Close()
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
+		NewClient:          tracing.WrapRuntimeClient(manager.DefaultNewClient),
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
