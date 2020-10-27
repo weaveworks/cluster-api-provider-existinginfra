@@ -1,5 +1,5 @@
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+VERSION=$(shell git describe --always --match "v*")
+IMAGE_TAG := $(shell tools/image-tag)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd"
 
@@ -31,7 +31,7 @@ pkg/apis/wksprovider/machine/crds/crds_vfsdata.go: $(CRDS)
 
 # Build manager binary
 manager: pkg/apis/wksprovider/machine/crds/crds_vfsdata.go generate fmt vet
-	go build -o bin/manager main.go
+	go build -ldflags "-X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.Version=$(VERSION) -X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.ImageTag=$(IMAGE_TAG)" -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -48,11 +48,11 @@ uninstall: manifests
 # Clean up images and binaries
 clean:
 	rm -f bin/manager
-	docker rmi -f ${IMG}
+	docker rmi -f weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
+	cd config/manager && kustomize edit set image controller=weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
@@ -78,11 +78,11 @@ generate: controller-gen conversion-gen
 
 # Build the docker image
 docker-build: unit-tests
-	docker build . -t ${IMG}
+	docker build . -t weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
 
 # Push the docker image
 push: docker-build
-	docker push ${IMG}
+	docker push weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
 
 # find or download controller-gen
 # download controller-gen if necessary

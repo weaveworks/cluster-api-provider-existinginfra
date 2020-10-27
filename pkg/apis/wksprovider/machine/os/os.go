@@ -25,6 +25,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	"github.com/weaveworks/libgitops/pkg/serializer"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/apps/v1beta2"
@@ -464,6 +465,7 @@ func wksControllerManifest(controller ControllerParams, namespace string) ([]byt
 	if err != nil {
 		return nil, err
 	}
+	content, err = UpdateControllerImage(content, version.ImageTag)
 	return UpdateControllerImage(content, controller.ImageOverride)
 }
 
@@ -1165,6 +1167,7 @@ spec:
             memory: 20Mi
 `
 
+// weaveworks/cluster-api-existinginfra-controller:v0.0.6
 var sealedSecretCRDManifestString = []byte(`apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
