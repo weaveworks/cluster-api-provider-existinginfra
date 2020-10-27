@@ -3,7 +3,6 @@ module github.com/weaveworks/cluster-api-provider-existinginfra
 go 1.13
 
 require (
-	github.com/HdrHistogram/hdrhistogram-go v0.9.0 // indirect
 	github.com/cavaliercoder/go-rpm v0.0.0-20200122174316-8cb9fd9c31a8
 	github.com/chanwit/plandiff v1.0.0
 	github.com/codahale/hdrhistogram v0.9.0 // indirect
@@ -11,16 +10,15 @@ require (
 	github.com/fatih/structs v1.1.0
 	github.com/go-logr/logr v0.1.0
 	github.com/oleiade/reflections v1.0.0 // indirect
-	github.com/onsi/ginkgo v1.12.1
+	github.com/onsi/ginkgo v1.13.0
 	github.com/onsi/gomega v1.10.1
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
-	github.com/stretchr/testify v1.4.0
-	github.com/weaveworks/libgitops v0.0.2
+	github.com/stretchr/testify v1.6.1
 	github.com/uber/jaeger-client-go v2.25.0+incompatible // indirect
-	github.com/uber/jaeger-lib v2.3.0+incompatible // indirect
-	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
+	github.com/weaveworks/libgitops v0.0.2
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	gopkg.in/oleiade/reflections.v1 v1.0.0
 	k8s.io/api v0.18.6
 	k8s.io/apimachinery v0.18.6
