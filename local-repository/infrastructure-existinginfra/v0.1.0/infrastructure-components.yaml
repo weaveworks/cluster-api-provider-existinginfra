@@ -1132,7 +1132,7 @@ spec:
         operator: Exists
       containers:
       - name: controller
-        image: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6"}
+        image: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6
         env:
         - name: EXISTINGINFRA_CONTROLLER_IMAGE
           value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6"}

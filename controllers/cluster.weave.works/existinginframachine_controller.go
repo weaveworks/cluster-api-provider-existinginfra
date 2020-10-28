@@ -495,6 +495,9 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 				}); err != nil {
 					return err
 				}
+				if err := a.Client.Delete(ctx, node); err != nil {
+					return err
+				}
 			} else if isOriginal {
 				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.OriginalMaster)
 			} else {
@@ -574,6 +577,9 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 		DeleteLocalData:     true,
 		IgnoreAllDaemonSets: true,
 	}); err != nil {
+		return err
+	}
+	if err := a.Client.Delete(ctx, node); err != nil {
 		return err
 	}
 	if err := installer.SetupNode(nodePlan); err != nil {
