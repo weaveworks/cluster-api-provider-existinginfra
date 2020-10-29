@@ -79,7 +79,7 @@ func BuildUpgradePlan(pkgType resource.PkgType, k8sVersion string, ntype NodeTyp
 			plan.DependOn("upgrade:node-kubelet"))
 		b.AddResource(
 			"upgrade:node-kubectl",
-			&resource.RPM{Name: "kubelet", Version: k8sVersion, DisableExcludes: "kubernetes"},
+			&resource.RPM{Name: "kubectl", Version: k8sVersion, DisableExcludes: "kubernetes"},
 			plan.DependOn("upgrade:node-restart-kubelet"))
 		b.AddResource(
 			"upgrade:node-lock-kubernetes",
