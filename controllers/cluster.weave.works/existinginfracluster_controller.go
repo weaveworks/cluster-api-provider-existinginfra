@@ -17,7 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -35,7 +34,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/ssh"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/specs"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
-	"github.com/weaveworks/libgitops/pkg/serializer"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,7 +47,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -298,7 +296,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrap(err, "failed to extract configuration")
 	}
 	eic = &cleanEic
-	clusterManifest, err := marshal(cluster, eic)
+	clusterManifest, err := manifest.Marshal(cluster, eic)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal cluster manifests")
 	}
@@ -309,7 +307,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	for _, e := range eims {
 		machineObjs = append(machineObjs, e)
 	}
-	machinesManifest, err := marshal(machineObjs...)
+	machinesManifest, err := manifest.Marshal(machineObjs...)
 	if err != nil {
 		return gerrors.Wrap(err, "failed to marshal machine manifests")
 	}
@@ -321,8 +319,8 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		ServicesCIDRBlocks:   sp.Cluster.Spec.ClusterNetwork.Services.CIDRBlocks,
 		PodsCIDRBlocks:       sp.Cluster.Spec.ClusterNetwork.Pods.CIDRBlocks,
 		ExistingInfraCluster: *eic,
-		ClusterManifest:      clusterManifest,
-		MachinesManifest:     machinesManifest,
+		ClusterManifest:      string(clusterManifest),
+		MachinesManifest:     string(machinesManifest),
 		ConnectionInfo:       machineInfo,
 		BootstrapToken:       token,
 		KubeletConfig: config.KubeletConfig{
@@ -551,21 +549,4 @@ func toUint16(num string) (uint16, error) {
 		return 0, err
 	}
 	return uint16(val), nil
-}
-
-func marshal(objs ...interface{}) (string, error) {
-	var buf bytes.Buffer
-	fw := serializer.NewYAMLFrameWriter(&buf)
-	data := [][]byte{}
-	for _, obj := range objs {
-		value, err := yaml.Marshal(obj)
-		if err != nil {
-			return "", err
-		}
-		data = append(data, value)
-	}
-	if err := serializer.WriteFrameList(fw, data); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }

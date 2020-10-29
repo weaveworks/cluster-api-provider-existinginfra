@@ -18,7 +18,8 @@ require (
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.6.1
+	github.com/tj/assert v0.0.3
 	github.com/weaveworks/footloose v0.0.0-20200918140536-ff126705213e // indirect
 	github.com/weaveworks/libgitops v0.0.2
 	golang.org/x/build v0.0.0-20190927031335-2835ba2e683f

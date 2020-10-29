@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 
 	"github.com/blang/semver"
@@ -64,6 +65,7 @@ func ParseManifest(file string) (ml []*clusterv1.Machine, bl []*existinginfrav1.
 	if err != nil {
 		return nil, nil, err
 	}
+	defer f.Close()
 	ml, bl, err = Parse(f)
 	if err != nil {
 		err = errors.Wrapf(err, "parsing %q", file)
@@ -95,6 +97,24 @@ func Parse(rc io.ReadCloser) (ml []*clusterv1.Machine, bl []*existinginfrav1.Exi
 	}
 
 	return
+}
+
+// WriteManifest takes an array of Machine and ExistingInfraMachine objects and creates the
+// machines manifest file
+func WriteManifest(machines []*clusterv1.Machine, eiMachines []*existinginfrav1.ExistingInfraMachine, path string) error {
+	machineObjs := []interface{}{}
+	for _, m := range machines {
+		machineObjs = append(machineObjs, m)
+	}
+	for _, e := range eiMachines {
+		machineObjs = append(machineObjs, e)
+	}
+	data, err := manifest.Marshal(machineObjs...)
+	err = ioutil.WriteFile(path, data, 0644)
+	if err != nil {
+		return errors.Wrap(err, "failed writing the machines file")
+	}
+	return nil
 }
 
 // Validate validates the provided machines.
