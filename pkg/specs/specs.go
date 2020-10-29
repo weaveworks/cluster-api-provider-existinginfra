@@ -2,14 +2,18 @@ package specs
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+
+	"io"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/cluster/machine"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/scheme"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/libgitops/pkg/serializer"
-	"io"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 )
@@ -94,6 +98,17 @@ func PrintErrors(errors field.ErrorList) {
 	}
 }
 
+// ParseClusterManifest parses a cluster manifest file
+func ParseClusterManifest(file string) (*clusterv1.Cluster, *existinginfrav1.ExistingInfraCluster, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	return ParseCluster(f)
+}
+
 // ParseCluster converts the manifest file into a Cluster
 func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existinginfrav1.ExistingInfraCluster, err error) {
 	// Read from the ReadCloser YAML document-by-document
@@ -126,6 +141,17 @@ func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existingin
 	}
 
 	return
+}
+
+// WriteManifest takes a cluster and ExistingInfra cluster and creates the
+// manifest file
+func WriteManifest(cluster *clusterv1.Cluster, eic *existinginfrav1.ExistingInfraCluster, path string) error {
+	data, err := manifest.Marshal(cluster, eic)
+	err = ioutil.WriteFile(path, data, 0644)
+	if err != nil {
+		return errors.Wrap(err, "failed writing the cluster file")
+	}
+	return nil
 }
 
 // populateCluster mutates the cluster manifest:

@@ -6,6 +6,7 @@ import (
 
 	"github.com/weaveworks/libgitops/pkg/serializer"
 	kyaml "sigs.k8s.io/kustomize/kyaml/yaml"
+	k8syaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -128,4 +129,24 @@ func visitElementsForPath(obj *kyaml.RNode, fn func(node *kyaml.RNode) error, pa
 
 func setNamespaceFilter(ns string) kyaml.FieldSetter {
 	return kyaml.SetField("namespace", kyaml.NewScalarRNode(ns))
+}
+
+// Marshal takes one or more struts and uses sig.k8s.io/yaml to
+// convert into a string.  The conversion adheres to the json
+// comments in the struct
+func Marshal(objs ...interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	fw := serializer.NewYAMLFrameWriter(&buf)
+	data := [][]byte{}
+	for _, obj := range objs {
+		value, err := k8syaml.Marshal(obj)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, value)
+	}
+	if err := serializer.WriteFrameList(fw, data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
