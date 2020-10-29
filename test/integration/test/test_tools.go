@@ -157,12 +157,12 @@ func (c *context) applyLocalManifest(manifest string) {
 
 // Run a command ignoring output (though display it while command is running)
 func (c *context) run(cmdItems ...string) {
-	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr}, cmdItems...)
+	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ()}, cmdItems...)
 }
 
 // Run a command ignoring output and exit the test if an error occurs
 func (c *context) runAndCheckError(cmdItems ...string) {
-	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, CheckError: true}, cmdItems...)
+	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ(), CheckError: true}, cmdItems...)
 }
 
 // Run a command ignoring output allowing configuration of stdout, stderr, dir, env, and whether or not to exit on error

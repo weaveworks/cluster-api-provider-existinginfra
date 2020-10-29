@@ -372,7 +372,7 @@ func CreateSeedNodeSetupPlan(o *OS, params SeedNodeParams) (*plan.Plan, error) {
 		b.AddResource("install:capi", ctlrRsc, plan.DependOn("kubectl:apply:cluster", "install:connection:info"))
 	}
 
-	wksCtlrManifest, err := wksControllerManifest(params.Controller, params.Namespace)
+	wksCtlrManifest, err := WksControllerManifest(params.Controller.ImageOverride, params.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -460,13 +460,13 @@ func capiControllerManifest(controller ControllerParams, namespace string) ([]by
 	return getManifest(capiControllerManifestString, namespace)
 }
 
-func wksControllerManifest(controller ControllerParams, namespace string) ([]byte, error) {
+func WksControllerManifest(imageOverride, namespace string) ([]byte, error) {
 	content, err := getManifest(wksControllerManifestString, namespace)
 	if err != nil {
 		return nil, err
 	}
 	content, err = UpdateControllerImage(content, version.ImageTag)
-	return UpdateControllerImage(content, controller.ImageOverride)
+	return UpdateControllerImage(content, imageOverride)
 }
 
 func sealedSecretCRDManifest() []byte {
@@ -489,6 +489,7 @@ func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 	if controllerImageOverride == "" {
 		return manifest, nil
 	}
+	fullOverride := strings.Contains(controllerImageOverride, ":")
 	d := &v1beta2.Deployment{}
 	if err := yaml.Unmarshal(manifest, d); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal WKS controller's manifest")
@@ -499,9 +500,22 @@ func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 	var updatedController bool
 	for i := 0; i < len(d.Spec.Template.Spec.Containers); i++ {
 		if d.Spec.Template.Spec.Containers[i].Name == "controller" {
+			currentImage := d.Spec.Template.Spec.Containers[i].Image
+			if !fullOverride {
+				controllerImageOverride = currentImage[0:strings.Index(currentImage, ":")+1] + controllerImageOverride
+			}
 			d.Spec.Template.Spec.Containers[i].Image = controllerImageOverride
 			env := d.Spec.Template.Spec.Containers[i].Env
-			env = append(env, v1.EnvVar{Name: "EXISTINGINFRA_CONTROLLER_IMAGE", Value: controllerImageOverride})
+			found := false
+			for _, entry := range env {
+				if entry.Name == "EXISTINGINFRA_CONTROLLER_IMAGE" {
+					entry.Value = controllerImageOverride
+					found = true
+				}
+			}
+			if !found {
+				env = append(env, v1.EnvVar{Name: "EXISTINGINFRA_CONTROLLER_IMAGE", Value: controllerImageOverride})
+			}
 			d.Spec.Template.Spec.Containers[i].Env = env
 			updatedController = true
 		}

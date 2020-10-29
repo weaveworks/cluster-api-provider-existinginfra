@@ -13,11 +13,10 @@ const (
 )
 
 var (
-	// The constants below are to be set by flags passed to `go build`.
-	// Examples: -X version.Version=xxxxx -X version.ImageTag=yyyyy
+	// The constant below is to be set by flags passed to `go build`.
+	// Example: -X version.Version=xxxxx
 
-	Version  = "undefined"
-	ImageTag = "latest"
+	Version = "undefined"
 )
 
 // MatchesRange parses the provided version and versions range, and checks if
