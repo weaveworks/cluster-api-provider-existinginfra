@@ -31,7 +31,7 @@ pkg/apis/wksprovider/machine/crds/crds_vfsdata.go: $(CRDS)
 
 # Build manager binary
 manager: pkg/apis/wksprovider/machine/crds/crds_vfsdata.go generate fmt vet
-	go build -ldflags "-X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.Version=$(VERSION) -X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.ImageTag=$(IMAGE_TAG)" -o bin/manager main.go
+	go build -ldflags "-X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.Version=$(VERSION)" -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -68,7 +68,7 @@ vet:
 	go vet ./...
 
 # Generate code
-generate: controller-gen conversion-gen
+generate: controller-gen conversion-gen image-tag-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(CONVERSION_GEN) \
 		--output-base ../../. \
@@ -83,6 +83,12 @@ docker-build: unit-tests
 # Push the docker image
 push: docker-build
 	docker push weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+
+# Generate code containing an image manifest that tracks the current IMAGE_TAG so
+# this code can be used upstream by builds that don't have access to the IMAGE_TAG
+image-tag-gen:
+	@cp templates/image_tag.template pkg/utilities/version/generated.go
+	@echo "\"$(IMAGE_TAG)\"" >> pkg/utilities/version/generated.go
 
 # find or download controller-gen
 # download controller-gen if necessary
