@@ -89,6 +89,7 @@ type machineConnectionInfo struct {
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;patch
 
 func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.TODO() // upstream will add this eventually
