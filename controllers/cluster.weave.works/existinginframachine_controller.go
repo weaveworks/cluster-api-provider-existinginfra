@@ -444,6 +444,12 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
+	isMaster := isMaster(node)
+	if isMaster {
+		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
+			return err
+		}
+	}
 	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
 	if err != nil {
 		return gerrors.Wrapf(err, "Failed to get node plan for machine %s", machine.Name)
@@ -474,12 +480,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	}
 
 	contextLog.Infof("........................NEW UPDATE FOR: %s...........................", machine.Name)
-	isMaster := isMaster(node)
-	if isMaster {
-		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
-			return err
-		}
-	}
+
 	upOrDowngrade := isUpOrDowngrade(machine, node)
 	contextLog.Infof("Is master: %t, is up or downgrade: %t", isMaster, upOrDowngrade)
 	if upOrDowngrade {
