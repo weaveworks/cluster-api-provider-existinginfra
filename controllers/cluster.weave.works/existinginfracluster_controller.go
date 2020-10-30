@@ -120,9 +120,6 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	defer func() {
 		if err := patchHelper.Patch(ctx, eic); err != nil {
 			contextLog.Errorf("failed to patch ExistingInfraCluster: %v", err)
-			if reterr == nil {
-				reterr = err
-			}
 		}
 	}()
 

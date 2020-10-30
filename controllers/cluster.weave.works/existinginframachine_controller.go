@@ -94,6 +94,7 @@ type machineConnectionInfo struct {
 func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.TODO() // upstream will add this eventually
 	contextLog := log.WithField("name", req.NamespacedName)
+	skipping := false
 
 	// request only contains the name of the object, so fetch it from the api-server
 	eim := &existinginfrav1.ExistingInfraMachine{}
@@ -150,11 +151,11 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	}
 	// Attempt to Patch the ExistingInfraMachine object and status after each reconciliation.
 	defer func() {
+		if skipping {
+			return
+		}
 		if err := patchHelper.Patch(ctx, eim); err != nil {
 			contextLog.Errorf("failed to patch ExistingInfraMachine: %v", err)
-			if reterr == nil {
-				reterr = err
-			}
 		}
 	}()
 
@@ -171,8 +172,9 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	err = r.update(ctx, eic, machine, eim)
 	if err != nil {
 		contextLog.Errorf("failed to update machine: %v", err)
+		skipping = true
 	}
-	return ctrl.Result{}, err
+	return ctrl.Result{}, nil
 }
 
 func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *os.OS, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) error {
