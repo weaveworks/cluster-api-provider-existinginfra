@@ -55,6 +55,7 @@ rules:
   - configmaps
   verbs:
   - get
+  - watch
   - list
 # The below is required for the WKS controller to be able to delete daemonsets
 # upon machine deletions.
