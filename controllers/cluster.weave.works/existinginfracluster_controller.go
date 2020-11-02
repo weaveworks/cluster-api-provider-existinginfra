@@ -38,6 +38,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrs "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
@@ -116,11 +117,12 @@ func (r *ExistingInfraClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	// Attempt to Patch the ExistingInfraMachine object and status after each reconciliation.
+	// Attempt to Patch the ExistingInfraCluster object and status after each reconciliation.
 	defer func() {
 		if err := patchHelper.Patch(ctx, eic); err != nil {
 			contextLog.Errorf("failed to patch ExistingInfraCluster: %v", err)
-			if reterr == nil {
+			reducedErr := utilerrs.Reduce(err)
+			if reterr == nil && !apierrs.IsNotFound(reducedErr) {
 				reterr = err
 			}
 		}
