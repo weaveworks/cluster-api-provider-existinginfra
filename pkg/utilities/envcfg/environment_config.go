@@ -39,7 +39,7 @@ func GetEnvSpecificConfig(pkgType resource.PkgType, namespace string, cloudProvi
 	if err != nil {
 		return nil, errors.Wrap(err, "NewOS")
 	}
-	seLinuxStatus, seLinuxMode, err := osres.GetSELinuxStatus()
+	seLinuxStatus, _, err := osres.GetSELinuxStatus()
 	if err != nil {
 		return nil, errors.Wrap(err, "GetSELinuxStatus")
 	}
@@ -67,7 +67,7 @@ func GetEnvSpecificConfig(pkgType resource.PkgType, namespace string, cloudProvi
 		ConntrackMax:          0,
 		UseIPTables:           !inContainerVM,
 		SELinuxInstalled:      seLinuxStatus.IsInstalled(),
-		SetSELinuxPermissive:  !inContainerVM && seLinuxStatus.IsInstalled() && seLinuxMode.IsEnforcing(), // if it's enforcing, set to permissive
+		SetSELinuxPermissive:  !inContainerVM && seLinuxStatus.IsInstalled(), // if selinux is installed always try to set to permissive
 		LockYUMPkgs:           pkgType == resource.PkgTypeRPM,
 		DisableSwap:           !inContainerVM,
 		IgnorePreflightErrors: ignorePreflightErrors,
