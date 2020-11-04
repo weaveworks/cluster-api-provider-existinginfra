@@ -88,7 +88,9 @@ func BuildUpgradePlan(pkgType resource.PkgType, k8sVersion string, ntype NodeTyp
 	case Worker:
 		b.AddResource(
 			"upgrade:node-kubeadm-upgrade",
-			&resource.Run{Script: object.String(fmt.Sprintf("kubeadm upgrade node config --kubelet-version %s", k8sVersion))},
+			// From kubeadm upgrade node phase kubelet-config --help
+			// > kubeadm uses the KuberneteVersion field in the kubeadm-config ConfigMap to determine what the _desired_ kubelet version is.
+			&resource.Run{Script: object.String("kubeadm upgrade node phase kubelet-config")},
 			plan.DependOn("upgrade:node-install-kubeadm"))
 	}
 
