@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "fixes-spec-parsing-7f305704"
+const ImageTag = "turn-controller-into-provider-91c37fb7"
