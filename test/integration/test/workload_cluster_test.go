@@ -252,17 +252,14 @@ func ensureNewArgumentsWereProcessed(c *context) {
 	for name, val := range kubeletArgs {
 		for _, conn := range conns {
 			argString := fmt.Sprintf("%s=%s", name, val)
-			out, eout, err := c.sshCall(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep /usr/bin/kubelet | grep %s", argString))
-			log.Infof("OUT: %s, EOUT: %s, ERR: %v", out, eout, err)
+			c.makeSSHCallAndCheckError(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep /usr/bin/kubelet | grep %s", argString))
 		}
 	}
 
 	for name, val := range apiServerArgs {
 		for _, conn := range conns {
 			argString := fmt.Sprintf("%s=%s", name, val)
-			out, eout, err := c.sshCall(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString))
-			log.Infof("AOUT: %s, AEOUT: %s, AERR: %v", out, eout, err)
-			//		c.makeSSHCallAndCheckError("172.17.0.4", "2224", fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString))
+			c.makeSSHCallAndCheckError(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString))
 		}
 	}
 }

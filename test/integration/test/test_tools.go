@@ -313,9 +313,11 @@ func (c *context) getProviderEnvironment() []string {
 	tag, _, err := c.runCollectingOutput(filepath.Join(c.testDir, "../../../tools/image-tag"))
 	require.NoError(c.t, err)
 	return env("NAMESPACE=test", "CONTROL_PLANE_MACHINE_COUNT=2", "WORKER_MACHINE_COUNT=0", "HOME="+c.tmpDir,
-		"CONTROL_PLANE_ENDPOINT=172.17.0.2:6443", "EXISTINGINFRA_CONTROLLER_IMAGE=docker.io/weaveworks/cluster-api-existinginfra-controller:"+string(tag))
+		"CONTROL_PLANE_ENDPOINT=172.17.0.2:6443",
+		"EXISTINGINFRA_CONTROLLER_IMAGE=docker.io/weaveworks/cluster-api-existinginfra-controller:"+string(tag))
 }
 
+// Create a load balancer so that we can repave machines
 func (c *context) ConfigureHAProxy(loadBalancerAddress string, loadBalancerSSHPort int) {
 	log.Info("Configuring H/A proxy...")
 	keyFile := filepath.Join(c.tmpDir, "cluster-key")

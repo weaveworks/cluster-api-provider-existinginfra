@@ -199,14 +199,94 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
-	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
+	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
 		return err
 	}
+
+	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
+		return err
+	}
+
 	// CAPI machine controller requires providerID
 	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
 	a.recordEvent(machine, corev1.EventTypeNormal, "Create", "created machine %s", machine.Name)
 	return nil
+}
+
+func (a *ExistingInfraMachineReconciler) getClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster) (*v1.ConfigMap, error) {
+	var configMap v1.ConfigMap
+	if err := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: eic.Name}, &configMap); err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil, errors.New("No cluster config map found")
+		}
+		log.Infof("Failed to retrieve config map")
+		return nil, err
+	}
+	return &configMap, nil
+}
+
+func (a *ExistingInfraMachineReconciler) isMachineInClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster, ip string) (bool, error) {
+	configMap, err := a.getClusterConfigMap(ctx, eic)
+	if err != nil {
+		return false, err
+	}
+	var ips []string
+	if err := yaml.Unmarshal([]byte(configMap.Data["machines"]), &ips); err != nil {
+		return false, err
+	}
+	return isMachineInList(ip, ips), nil
+}
+
+func (a *ExistingInfraMachineReconciler) addMachineToClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster, newip string) error {
+	configMap, err := a.getClusterConfigMap(ctx, eic)
+	if err != nil {
+		return err
+	}
+	var ips []string
+	if err := yaml.Unmarshal([]byte(configMap.Data["machines"]), &ips); err != nil {
+		return err
+	}
+	if isMachineInList(newip, ips) {
+		return nil
+	}
+	ips = append(ips, newip)
+	ipbytes, err := yaml.Marshal(ips)
+	if err != nil {
+		return err
+	}
+	log.Info("Updating machine config map")
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var result corev1.ConfigMap
+		getErr := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: eic.Name}, &result)
+		if getErr != nil {
+			log.Errorf("failed to read config map, can't reschedule: %v", getErr)
+			return getErr
+		}
+		result.Data["machines"] = string(ipbytes)
+		updateErr := a.Client.Update(ctx, &result)
+		if updateErr != nil {
+			log.Errorf("failed to reschedule config map: %v", updateErr)
+			return updateErr
+		}
+		return nil
+	})
+	if retryErr != nil {
+		log.Errorf("failed to update config map: %v", retryErr)
+		return retryErr
+	}
+
+	log.Info("Successfully updated config map")
+	return nil
+}
+
+func isMachineInList(newip string, ips []string) bool {
+	for _, ip := range ips {
+		if ip == newip {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, m *existinginfrav1.ExistingInfraMachine) (*os.OS, io.Closer, error) {
