@@ -287,7 +287,7 @@ func (c *context) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 
 	unreadySeen := ""
 	for retryCount := 1; retryCount <= 20; retryCount++ {
-		cmdResults, eout, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
+		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		if err != nil {
 			time.Sleep(time.Second * 5)
 		}
