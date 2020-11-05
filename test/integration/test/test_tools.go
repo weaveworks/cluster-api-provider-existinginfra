@@ -283,26 +283,22 @@ func (c *context) ensureRunning(itemType, kubeconfigPath string) {
 // Check that not all instances of a specified resource type are ready
 func (c *context) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 	cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "-o",
-		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
+		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{@.spec.unschedulable}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
 
 	unreadySeen := ""
 	for retryCount := 1; retryCount <= 20; retryCount++ {
 		cmdResults, eout, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		if err != nil {
-			log.Infof("RESULTS: %s, EOUT: %s, ERR: %v", cmdResults, eout, err)
 			time.Sleep(time.Second * 5)
 		}
 		strs := strings.Split(string(cmdResults), "\n")
 		for _, str := range strs {
-			log.Infof("STR: %s", str)
 			nameAndConditions := strings.Split(str, ":")
 			if str != "" && nameAndConditions[0] != unreadySeen &&
 				(!strings.Contains(nameAndConditions[1], "Ready=True") || strings.Contains(nameAndConditions[1], ":true:")) {
-				log.Infof("HERE...")
 				if unreadySeen != "" {
 					return
 				}
-				log.Infof("THERE...")
 				unreadySeen = nameAndConditions[0]
 			}
 		}
