@@ -256,28 +256,10 @@ func (a *ExistingInfraMachineReconciler) addMachineToClusterConfigMap(ctx contex
 		return err
 	}
 	log.Info("Updating machine config map")
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var result corev1.ConfigMap
-		getErr := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: eic.Name}, &result)
-		if getErr != nil {
-			log.Errorf("failed to read config map, can't reschedule: %v", getErr)
-			return getErr
-		}
-		result.Data["machines"] = string(ipbytes)
-		updateErr := a.Client.Update(ctx, &result)
-		if updateErr != nil {
-			log.Errorf("failed to reschedule config map: %v", updateErr)
-			return updateErr
-		}
+	return a.updateConfigMap(ctx, a.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
+		configMap.Data["machines"] = string(ipbytes)
 		return nil
 	})
-	if retryErr != nil {
-		log.Errorf("failed to update config map: %v", retryErr)
-		return retryErr
-	}
-
-	log.Info("Successfully updated config map")
-	return nil
 }
 
 func isMachineInList(newip string, ips []string) bool {
@@ -1186,6 +1168,8 @@ func (a *ExistingInfraMachineReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 			},
 		).
 		Watches(
+			// Process changes to a cluster spec that affect the machines; look up machines in config map
+			// and queue them for reconcile when the cluster spec changes
 			&source.Kind{Type: &existinginfrav1.ExistingInfraCluster{}},
 			&handler.EnqueueRequestsFromMapFunc{
 				ToRequests: MachineMapper{reconciler: a},
@@ -1210,6 +1194,8 @@ type MachineMapper struct {
 	reconciler *ExistingInfraMachineReconciler
 }
 
+// Map processes changes to a cluster spec that affect the machines; look up machines in config map
+// and queue them for reconcile when the cluster spec changes
 func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	ns := mo.Meta.GetNamespace()
 	name := mo.Meta.GetName()
@@ -1223,6 +1209,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
+	// Check if the cluster spec has changed
 	specBytes, err := json.Marshal(eic.Spec)
 	if err != nil {
 		return nil
@@ -1247,6 +1234,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
+	// Find the machines needing update
 	result := []reconcile.Request{}
 	machineBytes := []byte(cmap.Data["machines"])
 	var ips []string
@@ -1260,30 +1248,22 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		}
 		result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: m.Namespace, Name: m.Name}})
 	}
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var result v1.ConfigMap
-		getErr := m.reconciler.Client.Get(context.TODO(), client.ObjectKey{Namespace: m.reconciler.controllerNamespace, Name: eic.Name}, &result)
-		if getErr != nil {
-			log.Errorf("failed to read config map, can't reschedule: %v", getErr)
-			return getErr
-		}
-		result.Data["spec"] = string(specBytes)
-		result.Data["machines"] = "[]"
 
-		updateErr := m.reconciler.Client.Update(context.TODO(), &result)
-		if updateErr != nil {
-			log.Errorf("failed to reschedule config map: %v", updateErr)
-			return updateErr
-		}
+	// Update the config map with the new spec and clear the list of machines (they will get added back after repaving)
+	if err := m.reconciler.updateConfigMap(context.TODO(), m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
+		configMap.Data["spec"] = string(specBytes)
+		configMap.Data["machines"] = "[]"
 		return nil
-	})
-	if retryErr != nil {
-		log.Errorf("failed to update config map: %v", retryErr)
+	}); err != nil {
+		log.Errorf("Failed to update cluster config map: %v", err)
 		return nil
 	}
+
 	return result
 }
 
+// updateAPIServerArgs updates the kubeadm-config config map with new apiserver arguments so that control plane nodes will pick them
+// up when repaved.
 func (a *ExistingInfraMachineReconciler) updateAPIServerArgs(ctx context.Context, apiServerArgs *[]existinginfrav1.ServerArgument) error {
 	log.Infof("In updateAPIServerArgs: %v", *apiServerArgs)
 	var configMap v1.ConfigMap
@@ -1313,24 +1293,22 @@ func (a *ExistingInfraMachineReconciler) updateAPIServerArgs(ctx context.Context
 		extraArgs = map[string]interface{}{}
 		apiServer["extraArgs"] = extraArgs
 	}
-	log.Infof("AS: %v, EA: %v", apiServer, extraArgs)
 	emap := extraArgs.(map[string]interface{})
 	for _, serverArg := range *apiServerArgs {
 		emap[serverArg.Name] = serverArg.Value
 	}
-	log.Infof("EMAP: %v", emap)
 	apiServer["extraArgs"] = extraArgs
 	bytes, err := yaml.Marshal(confobj)
 	if err != nil {
 		return err
 	}
-	log.Infof("MARSHALLED: %s", bytes)
 	return a.updateConfigMap(ctx, "kube-system", "kubeadm-config", func(configMap *v1.ConfigMap) error {
 		configMap.Data["ClusterConfiguration"] = string(bytes)
 		return nil
 	})
 }
 
+// updateConfigMap updates a config map with retries for conflicts
 func (a *ExistingInfraMachineReconciler) updateConfigMap(ctx context.Context, namespace, name string, updater func(*v1.ConfigMap) error) error {
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result v1.ConfigMap

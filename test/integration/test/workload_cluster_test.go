@@ -247,6 +247,7 @@ type conn struct {
 
 // Check that arguments show up after being changed on the fly
 func ensureNewArgumentsWereProcessed(c *context) {
+	log.Info("Ensuring new arguments are present on nodes in cluster...")
 	conns := []conn{{ip: "127.0.0.1", port: "2223"}, {ip: "127.0.0.1", port: "2224"}}
 
 	for name, val := range kubeletArgs {
@@ -279,7 +280,7 @@ func ensureAllWorkloadNodesAreRunning(c *context, workloadKubeconfig string) {
 
 // Wait for the workload cluster to be NOT ready
 func ensureAllWorkloadNodesStoppedRunning(c *context, workloadKubeconfig string) {
-	log.Info("Ensuring all nodes stop running...")
+	log.Info("Ensuring all nodes stop running while getting repaved...")
 	c.ensureAllStoppedRunning("nodes", workloadKubeconfig)
 }
 

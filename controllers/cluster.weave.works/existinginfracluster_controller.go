@@ -166,20 +166,6 @@ func (r *ExistingInfraClusterReconciler) findMachineByPrivateAddress(ctx context
 	return nil, errors.New(fmt.Sprintf("Could not locate machine with private address: %s", addr))
 }
 
-// func (r *ExistingInfraClusterReconciler) findNodeByPrivateAddress(ctx context.Context, addr string) (*corev1.Node, error) {
-//  var nodes corev1.NodeList
-//  err := r.Client.List(ctx, &nodes)
-//  if err != nil {
-//      return nil, gerrors.Wrap(err, "failed to list nodes")
-//  }
-//  for _, node := range nodes.Items {
-//      if getNodePrivateAddress(&node) == addr {
-//          return &node, nil
-//      }
-//  }
-//  return nil, apierrs.NewNotFound(schema.GroupResource{Group: "", Resource: "nodes"}, "")
-// }
-
 func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
 	var finalError error
 	controlPlaneCount, err := strconv.Atoi(eic.Spec.ControlPlaneMachineCount)
@@ -219,7 +205,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 		return err
 	}
 
-	log.Infof("Created machines: %v, %v", machines, eims)
+	log.Infof("Created machines...")
 	initError := r.initiateCluster(ctx, cluster, eic, machines, eims, machineInfo)
 	if initError != nil && finalError == nil { // no panic
 		//nolint:errcheck
@@ -279,40 +265,6 @@ func (r *ExistingInfraClusterReconciler) modifyEIC(ctx context.Context, eic *clu
 	}
 	return nil
 }
-
-// func (r *ExistingInfraClusterReconciler) setNodeAnnotation(ctx context.Context, node *corev1.Node, key, value string) error {
-//  err := r.modifyNode(ctx, node, func(node *corev1.Node) {
-//      node.Annotations[key] = value
-//  })
-//  if err != nil {
-//      return gerrors.Wrapf(err, "Failed to set node annotation: %s for node: %s", key, node.Name)
-//  }
-//  return nil
-// }
-
-// func (r *ExistingInfraClusterReconciler) modifyNode(ctx context.Context, node *corev1.Node, updater func(node *corev1.Node)) error {
-//  contextLog := log.WithFields(log.Fields{"node": node.Name})
-//  retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-//      var result corev1.Node
-//      getErr := r.Client.Get(ctx, client.ObjectKey{Name: node.Name}, &result)
-//      if getErr != nil {
-//          contextLog.Errorf("failed to read node info, assuming unsafe to update: %v", getErr)
-//          return getErr
-//      }
-//      updater(&result)
-//      updateErr := r.Client.Update(ctx, &result)
-//      if updateErr != nil {
-//          contextLog.Errorf("failed attempt to update node annotation: %v", updateErr)
-//          return updateErr
-//      }
-//      return nil
-//  })
-//  if retryErr != nil {
-//      contextLog.Errorf("failed to update node annotation: %v", retryErr)
-//      return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", node.Name)
-//  }
-//  return nil
-// }
 
 func (r *ExistingInfraClusterReconciler) recordEvent(object runtime.Object, eventType, reason, messageFmt string, args ...interface{}) {
 	r.EventRecorder.Eventf(object, eventType, reason, messageFmt, args...)
@@ -445,7 +397,7 @@ func (r *ExistingInfraClusterReconciler) createClusterConfigMap(ctx context.Cont
 }
 
 func (r *ExistingInfraClusterReconciler) getClusterConfigMap(ctx context.Context, name types.NamespacedName) (*v1.ConfigMap, error) {
-	log.Infof("Getting cluster: %v", name)
+	log.Infof("Getting cluster config map: %v", name)
 	var configMap v1.ConfigMap
 	if err := r.Get(ctx, name, &configMap); err != nil {
 		if kerrors.IsNotFound(err) {
