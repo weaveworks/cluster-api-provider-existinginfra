@@ -295,7 +295,7 @@ func (c *context) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 		for _, str := range strs {
 			nameAndConditions := strings.Split(str, ":")
 			if str != "" && nameAndConditions[0] != unreadySeen &&
-				(!strings.Contains(nameAndConditions[1], "Ready=True") || strings.Contains(nameAndConditions[1], ":true:")) {
+				(!strings.Contains(nameAndConditions[2], "Ready=True") || nameAndConditions[1] == "true") {
 				if unreadySeen != "" {
 					return
 				}
