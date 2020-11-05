@@ -199,7 +199,7 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
 		return err
 	}
 

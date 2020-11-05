@@ -7,6 +7,7 @@ package test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -32,7 +33,7 @@ import (
 
 // Holds useful parameters for integration tests. "testDir" is the directory containing the running test; "tmpDir" is
 // a temporary directory that can be used as a test base.
-type context struct {
+type testContext struct {
 	t       *testing.T
 	tmpDir  string
 	testDir string
@@ -47,25 +48,25 @@ type commandConfig struct {
 	Stderr     *os.File
 }
 
-// getContext returns a "context" object containing all the information needed to perform most
-// test tasks. Methods on the context object can be used to implement integration tests and manage
+// getTestContext returns a "testContext" object containing all the information needed to perform most
+// test tasks. Methods on the testContext object can be used to implement integration tests and manage
 // temporary directories, git repositories, and clusters.
-func getContext(t *testing.T) *context {
+func getTestContext(t *testing.T) *testContext {
 	tmpDir, err := ioutil.TempDir("", "tmp_dir")
 	require.NoError(t, err)
-	return getContextFrom(t, tmpDir)
+	return getTestContextFrom(t, tmpDir)
 }
 
-// Creates a context, doing the following:
+// Creates a testContext, doing the following:
 // - creating a temporary directory (tmpDir) which will be established as HOME (for user-relative configuration)
 // - installing kind
 // - installing clusterctl
 // - cleaning up any existing kind clusters
 // - creating a new kind cluster
-func getContextFrom(t *testing.T, tmpDir string) *context {
+func getTestContextFrom(t *testing.T, tmpDir string) *testContext {
 	log.Infof("Using temporary directory: %s\n", tmpDir)
 
-	c := &context{
+	c := &testContext{
 		t:       t,
 		tmpDir:  tmpDir,
 		testDir: getTestDir(t),
@@ -97,14 +98,14 @@ func getContextFrom(t *testing.T, tmpDir string) *context {
 }
 
 // Clean everything up; remove temp directory and delete kind cluster
-func (c *context) cleanup() {
+func (c *testContext) cleanup() {
 	log.Infof("About to remove temp dir: '%s'", c.tmpDir)
 	c.runAndCheckError(filepath.Join(c.tmpDir, "go", "bin", "kind"), "delete", "cluster")
 	os.RemoveAll(c.tmpDir)
 }
 
 // Determine the current OS
-func (c *context) getOS() string {
+func (c *testContext) getOS() string {
 	osbytes, _, err := c.runCollectingOutput("uname", "-s")
 	require.NoError(c.t, err)
 	os := string(osbytes)
@@ -131,7 +132,7 @@ var archmap = map[string]string{
 	"i686":    "386",
 }
 
-func (c *context) getArch() string {
+func (c *testContext) getArch() string {
 	archbytes, _, err := c.runCollectingOutput("uname", "-m")
 	arch := string(archbytes)
 
@@ -158,7 +159,7 @@ func env(items ...string) []string {
 }
 
 // Apply a manifest available inline to the management cluster
-func (c *context) applyManagementManifest(manifest string) {
+func (c *testContext) applyManagementManifest(manifest string) {
 	f, err := ioutil.TempFile(c.tmpDir, "---manifest--*---")
 	require.NoError(c.t, err)
 	defer os.Remove(f.Name())
@@ -168,7 +169,7 @@ func (c *context) applyManagementManifest(manifest string) {
 }
 
 // Apply a manifest available inline to the workload cluster
-func (c *context) applyWorkloadManifest(manifest, kubeconfig string) {
+func (c *testContext) applyWorkloadManifest(manifest, kubeconfig string) {
 	f, err := ioutil.TempFile(c.tmpDir, "---manifest--*---")
 	require.NoError(c.t, err)
 	defer os.Remove(f.Name())
@@ -182,17 +183,17 @@ func (c *context) applyWorkloadManifest(manifest, kubeconfig string) {
 }
 
 // Run a command ignoring output (though display it while command is running)
-func (c *context) run(cmdItems ...string) {
+func (c *testContext) run(cmdItems ...string) {
 	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ()}, cmdItems...)
 }
 
 // Run a command ignoring output and exit the test if an error occurs
-func (c *context) runAndCheckError(cmdItems ...string) {
+func (c *testContext) runAndCheckError(cmdItems ...string) {
 	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ(), CheckError: true}, cmdItems...)
 }
 
 // Run a command ignoring output allowing configuration of stdout, stderr, dir, env, and whether or not to exit on error
-func (c *context) runWithConfig(config commandConfig, cmdItems ...string) {
+func (c *testContext) runWithConfig(config commandConfig, cmdItems ...string) {
 	c.t.Helper()
 	cmd := exec.Command(cmdItems[0], cmdItems[1:]...)
 	cmd.Dir = config.Dir
@@ -209,12 +210,12 @@ func (c *context) runWithConfig(config commandConfig, cmdItems ...string) {
 }
 
 // Run a command capturing stdout and stderr separately
-func (c *context) runCollectingOutput(cmdItems ...string) ([]byte, []byte, error) {
+func (c *testContext) runCollectingOutput(cmdItems ...string) ([]byte, []byte, error) {
 	return c.runCollectingOutputWithConfig(commandConfig{Env: os.Environ()}, cmdItems...)
 }
 
 // Run a command capturing stdout and stderr separately allowing configuration of dir and env
-func (c *context) runCollectingOutputWithConfig(config commandConfig, cmdItems ...string) ([]byte, []byte, error) {
+func (c *testContext) runCollectingOutputWithConfig(config commandConfig, cmdItems ...string) ([]byte, []byte, error) {
 	cmd := exec.Command(cmdItems[0], cmdItems[1:]...)
 	var stdout, stderr bytes.Buffer
 	cmd.Dir = config.Dir
@@ -226,19 +227,19 @@ func (c *context) runCollectingOutputWithConfig(config commandConfig, cmdItems .
 }
 
 // Make an ssh call
-func (c *context) sshCall(ip, port, cmd string) ([]byte, []byte, error) {
+func (c *testContext) sshCall(ip, port, cmd string) ([]byte, []byte, error) {
 	return c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
 		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
 }
 
 // Make an ssh call and fail if it errors
-func (c *context) makeSSHCallAndCheckError(ip, port, cmd string) {
+func (c *testContext) makeSSHCallAndCheckError(ip, port, cmd string) {
 	c.runAndCheckError("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
 		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
 }
 
 // Check that a specified number of a resource type is running
-func (c *context) ensureCount(itemType string, count int, kubeconfigPath string) {
+func (c *testContext) ensureCount(itemType string, count int, kubeconfigPath string) {
 	for retryCount := 1; retryCount <= 30; retryCount++ {
 		cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "--no-headers=true"}
 		cmdResults, eout, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
@@ -257,7 +258,7 @@ func (c *context) ensureCount(itemType string, count int, kubeconfigPath string)
 }
 
 // Check that each instance of a specified resource type is ready
-func (c *context) ensureRunning(itemType, kubeconfigPath string) {
+func (c *testContext) ensureRunning(itemType, kubeconfigPath string) {
 	cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "-o",
 		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{@.spec.unschedulable}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
 
@@ -281,7 +282,7 @@ func (c *context) ensureRunning(itemType, kubeconfigPath string) {
 }
 
 // Check that not all instances of a specified resource type are ready
-func (c *context) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
+func (c *testContext) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 	cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "-o",
 		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{@.spec.unschedulable}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
 
@@ -309,7 +310,7 @@ func (c *context) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 }
 
 // Set up a provider-friendly environment
-func (c *context) getProviderEnvironment() []string {
+func (c *testContext) getProviderEnvironment() []string {
 	tag, _, err := c.runCollectingOutput(filepath.Join(c.testDir, "../../../tools/image-tag"))
 	require.NoError(c.t, err)
 	return env("NAMESPACE=test", "CONTROL_PLANE_MACHINE_COUNT=2", "WORKER_MACHINE_COUNT=0", "HOME="+c.tmpDir,
@@ -318,8 +319,9 @@ func (c *context) getProviderEnvironment() []string {
 }
 
 // Create a load balancer so that we can repave machines
-func (c *context) ConfigureHAProxy(loadBalancerAddress string, loadBalancerSSHPort int) {
+func (c *testContext) ConfigureHAProxy(loadBalancerAddress string, loadBalancerSSHPort int) {
 	log.Info("Configuring H/A proxy...")
+	ctx := context.TODO()
 	keyFile := filepath.Join(c.tmpDir, "cluster-key")
 	sshClient, err := ssh.NewClient(ssh.ClientParams{
 		User:           "root",
@@ -329,16 +331,17 @@ func (c *context) ConfigureHAProxy(loadBalancerAddress string, loadBalancerSSHPo
 	})
 	require.NoError(c.t, err)
 	defer sshClient.Close()
-	installer, err := capeios.Identify(sshClient)
+	installer, err := capeios.Identify(ctx, sshClient)
 	require.NoError(c.t, err)
 	runner := &sudo.Runner{Runner: sshClient}
-	cfg, err := envcfg.GetEnvSpecificConfig(installer.PkgType, "default", "", runner)
+	cfg, err := envcfg.GetEnvSpecificConfig(ctx, installer.PkgType, "default", "", runner)
 	require.NoError(c.t, err)
 	// resources
 	baseResource := recipe.BuildBasePlan(installer.PkgType)
 	dockerConfigResource, err := buildDockerConfigResource(c)
 	require.NoError(c.t, err)
 	criResource := recipe.BuildCRIPlan(
+		ctx,
 		&existinginfrav1.ContainerRuntime{
 			Kind:    "docker",
 			Package: "docker-ce",
@@ -365,9 +368,9 @@ func (c *context) ConfigureHAProxy(loadBalancerAddress string, loadBalancerSSHPo
 
 	lbPlan, err := lbPlanBuilder.Plan()
 	require.NoError(c.t, err)
-	err = lbPlan.Undo(runner, plan.EmptyState)
+	err = lbPlan.Undo(ctx, runner, plan.EmptyState)
 	require.NoError(c.t, err)
-	_, err = lbPlan.Apply(runner, plan.EmptyDiff())
+	_, err = lbPlan.Apply(ctx, runner, plan.EmptyDiff())
 	require.NoError(c.t, err)
 }
 
@@ -382,7 +385,7 @@ func generateHAConfiguration(clusterIPs []string) string {
 	return str.String()
 }
 
-func buildDockerConfigResource(c *context) (plan.Resource, error) {
+func buildDockerConfigResource(c *testContext) (plan.Resource, error) {
 	manifest, eout, err := c.runCollectingOutputWithConfig(
 		commandConfig{
 			Env:    c.getProviderEnvironment(),
@@ -410,7 +413,7 @@ func buildDockerConfigResource(c *context) (plan.Resource, error) {
 }
 
 // Determine if the temporary directory exists
-func tempDirExists(c *context) bool {
+func tempDirExists(c *testContext) bool {
 	_, err := os.Stat(c.tmpDir)
 	if err != nil {
 		if os.IsNotExist(err) {

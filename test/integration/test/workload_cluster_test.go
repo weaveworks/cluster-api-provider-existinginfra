@@ -89,7 +89,7 @@ func TestWorkloadClusterCreation(t *testing.T) {
 		fmt.Printf("Using default version: '%s'\n", version)
 	}
 
-	c := getContext(t)
+	c := getTestContext(t)
 	defer c.cleanup()
 
 	// Create two footloose machines to host a workload cluster
@@ -143,18 +143,18 @@ func TestWorkloadClusterCreation(t *testing.T) {
 
 }
 
-func installCertManager(c *context) {
+func installCertManager(c *testContext) {
 	log.Info("Installing cert manager...")
 	// kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.11.1/cert-manager.yaml
 	c.runAndCheckError("kubectl", "apply", "--validate=false", "-f", "https://github.com/jetstack/cert-manager/releases/download/v0.11.1/cert-manager.yaml")
 }
 
-func setupNetworking(c *context) {
+func setupNetworking(c *testContext) {
 	c.runAndCheckError("docker", "network", "connect", "bridge", "kind-control-plane")
 }
 
 // Copy in the existinginfra local-repository and set up configuration to point to it
-func setupProviderRepository(c *context) {
+func setupProviderRepository(c *testContext) {
 	log.Info("Setting up provider repository...")
 	providerRepositoryDir := filepath.Join(c.testDir, "..", "..", "..", "local-repository")
 	c.runAndCheckError("cp", "-r", providerRepositoryDir, c.tmpDir)
@@ -172,7 +172,7 @@ func setupProviderRepository(c *context) {
 	ioutil.WriteFile(filepath.Join(configDir, "clusterctl.yaml"), populated.Bytes(), 0600)
 }
 
-func installProvider(c *context) {
+func installProvider(c *testContext) {
 	log.Info("Installing existinginfra provider...")
 	c.runWithConfig(
 		commandConfig{
@@ -183,13 +183,13 @@ func installProvider(c *context) {
 		filepath.Join(c.tmpDir, "clusterctl"), "init", "--infrastructure=existinginfra")
 }
 
-func installNamespace(c *context) {
+func installNamespace(c *testContext) {
 	log.Info("Installing namespace...")
 	c.applyManagementManifest(testNamespace)
 }
 
 // Create a pool containing two footloose machines and their credentials
-func installMachinePool(c *context, info []capeios.MachineInfo) {
+func installMachinePool(c *testContext, info []capeios.MachineInfo) {
 	log.Info("Installing machine pool...")
 	t, err := template.New("machine-pool").Parse(testPoolTemplate)
 	require.NoError(c.t, err)
@@ -208,7 +208,7 @@ func installMachinePool(c *context, info []capeios.MachineInfo) {
 }
 
 // Update kubelet and apiserver arguments in running cluster
-func applyNewAPIServerAndKubeletArguments(c *context, kubeconfig string) {
+func applyNewAPIServerAndKubeletArguments(c *testContext, kubeconfig string) {
 	eic := getExistingInfraCluster(c)
 	cleanJson := eic.Annotations["kubectl.kubernetes.io/last-applied-configuration"]
 	var cleanEic v1alpha3.ExistingInfraCluster
@@ -231,7 +231,7 @@ func applyNewAPIServerAndKubeletArguments(c *context, kubeconfig string) {
 }
 
 // Retrieve the cluster resource from the management cluster
-func getExistingInfraCluster(c *context) *v1alpha3.ExistingInfraCluster {
+func getExistingInfraCluster(c *testContext) *v1alpha3.ExistingInfraCluster {
 	cmanifest, _, err := c.runCollectingOutput("kubectl", "get", "existinginfracluster", "test-cluster", "--namespace=test", "-o", "json")
 	require.NoError(c.t, err)
 	var eic v1alpha3.ExistingInfraCluster
@@ -246,7 +246,7 @@ type conn struct {
 }
 
 // Check that arguments show up after being changed on the fly
-func ensureNewArgumentsWereProcessed(c *context) {
+func ensureNewArgumentsWereProcessed(c *testContext) {
 	log.Info("Ensuring new arguments are present on nodes in cluster...")
 	conns := []conn{{ip: "127.0.0.1", port: "2223"}, {ip: "127.0.0.1", port: "2224"}}
 
@@ -266,26 +266,26 @@ func ensureNewArgumentsWereProcessed(c *context) {
 }
 
 // Wait for the management cluster to be ready for cluster creation
-func ensureAllManagementPodsAreRunning(c *context) {
+func ensureAllManagementPodsAreRunning(c *testContext) {
 	log.Info("Ensuring all pods are running...")
 	c.ensureRunning("pods", filepath.Join(c.tmpDir, ".kube", "config"))
 }
 
 // Wait for the workload cluster to be ready
-func ensureAllWorkloadNodesAreRunning(c *context, workloadKubeconfig string) {
+func ensureAllWorkloadNodesAreRunning(c *testContext, workloadKubeconfig string) {
 	log.Info("Ensuring nodes are running...")
 	c.ensureCount("nodes", 2, workloadKubeconfig)
 	c.ensureRunning("nodes", workloadKubeconfig)
 }
 
 // Wait for the workload cluster to be NOT ready
-func ensureAllWorkloadNodesStoppedRunning(c *context, workloadKubeconfig string) {
+func ensureAllWorkloadNodesStoppedRunning(c *testContext, workloadKubeconfig string) {
 	log.Info("Ensuring all nodes stop running while getting repaved...")
 	c.ensureAllStoppedRunning("nodes", workloadKubeconfig)
 }
 
 // Get the configuration for the workload cluster
-func getWorkloadKubeconfig(c *context) string {
+func getWorkloadKubeconfig(c *testContext) string {
 	var configBytes []byte
 	for retryCount := 1; retryCount <= 30; retryCount++ {
 		localConfigBytes, _, err := c.sshCall("127.0.0.1", "2223", "cat /etc/kubernetes/admin.conf")
@@ -314,7 +314,7 @@ func getWorkloadKubeconfig(c *context) string {
 }
 
 // Apply the generated cluster manifest to trigger workload cluster creation
-func createWorkloadCluster(c *context, vsn string) {
+func createWorkloadCluster(c *testContext, vsn string) {
 	log.Info("Creating workload cluster...")
 	manifest, eout, err := c.runCollectingOutputWithConfig(
 		commandConfig{
@@ -330,7 +330,7 @@ func createWorkloadCluster(c *context, vsn string) {
 }
 
 // Create footloose machines to host a workload cluster
-func createFootlooseMachines(c *context) []capeios.MachineInfo {
+func createFootlooseMachines(c *testContext) []capeios.MachineInfo {
 	// First, make sure we're clean
 	c.runWithConfig(commandConfig{}, "docker", "rm", "-f", "centos-multimaster-node0", "centos-multimaster-node1", "centos-multimaster-node2")
 	log.Info("Creating footloose machines...")
@@ -375,12 +375,12 @@ func createFootlooseMachines(c *context) []capeios.MachineInfo {
 }
 
 // Delete the machines underpinning the workload cluster
-func deleteFootlooseMachines(c *context) {
+func deleteFootlooseMachines(c *testContext) {
 	c.runWithConfig(commandConfig{Dir: c.tmpDir}, filepath.Join(c.tmpDir, "go", "bin", "footloose"), "delete")
 }
 
 // Create an SSH key for the footloose machines
-func createKey(c *context, keyFileName string) ([]byte, []byte) {
+func createKey(c *testContext, keyFileName string) ([]byte, []byte) {
 	// ssh-keygen -q -t rsa -b 4096 -C wk-quickstart@weave.works -f cluster-key -N ""
 	path := filepath.Join(c.tmpDir, keyFileName)
 	c.runAndCheckError("ssh-keygen", "-q", "-t", "rsa", "-b", "4096", "-C", "wk-quickstart@weave.works", "-f", path, "-N", "")
