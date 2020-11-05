@@ -291,12 +291,18 @@ func (c *testContext) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		if err != nil {
 			time.Sleep(time.Second * 5)
+			continue
 		}
 		strs := strings.Split(string(cmdResults), "\n")
 		for _, str := range strs {
 			nameAndConditions := strings.Split(str, ":")
+			log.Infof("Response: %s", str)
+			if len(nameAndConditions) < 3 { // name, unschedulable, conditions
+				continue
+			}
 			if str != "" && nameAndConditions[0] != unreadySeen &&
 				(!strings.Contains(nameAndConditions[2], "Ready=True") || nameAndConditions[1] == "true") {
+				log.Infof("Machine %s stopped...", nameAndConditions[0])
 				if unreadySeen != "" {
 					return
 				}
