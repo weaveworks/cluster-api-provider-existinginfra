@@ -21,22 +21,22 @@ endif
 all: manager
 
 # Run tests
-unit-tests: generate fmt vet manifests $(KUBEBUILDER_ASSETS)
-	go test -v ./pkg/... ./controllers/... -coverprofile cover.out -race -covermode=atomic
+unit-tests: generate fmt vet manifests manager $(KUBEBUILDER_ASSETS)
+	CGO_ENABLED=0 go test -v ./pkg/... ./controllers/... -coverprofile cover.out -covermode=atomic
 
 # Generate CRDs
 CRDS=$(shell find config/crd -name '*.yaml' -print)
 pkg/apis/wksprovider/machine/crds/crds_vfsdata.go: $(CRDS)
 	go generate ./pkg/apis/wksprovider/machine/crds
 
-# Generate CRDs
-CRDS=$(shell find config/crd -name '*.yaml' -print)
-pkg/apis/wksprovider/machine/crds_vfsdata.go: $(CRDS)
-	go generate ./pkg/apis/wksprovider/machine/crds
+# Generate Manifests
+MANIFESTS=$(shell find pkg/apis/wksprovider/manifests/yaml -name '*.yaml' -print)
+pkg/apis/wksprovider/manifests/manifests_vfsdata.go: $(MANIFESTS)
+	go generate ./pkg/apis/wksprovider/manifests
 
 # Build manager binary
-manager: pkg/apis/wksprovider/machine/crds/crds_vfsdata.go generate fmt vet
-	go build -ldflags "-X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.Version=$(VERSION)" -o bin/manager main.go
+manager: pkg/apis/wksprovider/machine/crds/crds_vfsdata.go pkg/apis/wksprovider/manifests/manifests_vfsdata.go generate fmt vet
+	CGO_ENABLED=0 go build -ldflags "-X github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version.Version=$(VERSION)" -o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests

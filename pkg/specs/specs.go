@@ -76,6 +76,10 @@ func (s *Specs) GetKubeletArguments() map[string]string {
 	return TranslateServerArgumentsToStringMap(s.ClusterSpec.KubeletArguments)
 }
 
+func (s *Specs) GetAPIServerArguments() map[string]string {
+	return TranslateServerArgumentsToStringMap(s.ClusterSpec.APIServer.ExtraArguments)
+}
+
 func (s *Specs) GetMachineCount() int {
 	return s.machineCount
 }

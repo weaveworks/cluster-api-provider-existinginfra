@@ -18,6 +18,16 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	capeios "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/os"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/ssh"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/specs"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
 )
 
 // Holds useful parameters for integration tests. "testDir" is the directory containing the running test; "tmpDir" is
@@ -147,14 +157,28 @@ func env(items ...string) []string {
 	return items
 }
 
-// Apply a manifest available inline
-func (c *context) applyLocalManifest(manifest string) {
+// Apply a manifest available inline to the management cluster
+func (c *context) applyManagementManifest(manifest string) {
 	f, err := ioutil.TempFile(c.tmpDir, "---manifest--*---")
 	require.NoError(c.t, err)
 	defer os.Remove(f.Name())
 	err = ioutil.WriteFile(f.Name(), []byte(manifest), 0600)
 	require.NoError(c.t, err)
 	c.runAndCheckError("kubectl", "apply", "-f", f.Name())
+}
+
+// Apply a manifest available inline to the workload cluster
+func (c *context) applyWorkloadManifest(manifest, kubeconfig string) {
+	f, err := ioutil.TempFile(c.tmpDir, "---manifest--*---")
+	require.NoError(c.t, err)
+	defer os.Remove(f.Name())
+	err = ioutil.WriteFile(f.Name(), []byte(manifest), 0600)
+	require.NoError(c.t, err)
+	_, eout, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfig)},
+		"kubectl", "apply", "-f", f.Name())
+	if err != nil {
+		require.FailNow(c.t, fmt.Sprintf("Failed to apply manifest: %v -- %s", err, eout))
+	}
 }
 
 // Run a command ignoring output (though display it while command is running)
@@ -186,7 +210,7 @@ func (c *context) runWithConfig(config commandConfig, cmdItems ...string) {
 
 // Run a command capturing stdout and stderr separately
 func (c *context) runCollectingOutput(cmdItems ...string) ([]byte, []byte, error) {
-	return c.runCollectingOutputWithConfig(commandConfig{}, cmdItems...)
+	return c.runCollectingOutputWithConfig(commandConfig{Env: os.Environ()}, cmdItems...)
 }
 
 // Run a command capturing stdout and stderr separately allowing configuration of dir and env
@@ -201,12 +225,26 @@ func (c *context) runCollectingOutputWithConfig(config commandConfig, cmdItems .
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
+// Make an ssh call
+func (c *context) sshCall(ip, port, cmd string) ([]byte, []byte, error) {
+	return c.runCollectingOutput("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
+		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
+}
+
+// Make an ssh call and fail if it errors
+func (c *context) makeSSHCallAndCheckError(ip, port, cmd string) {
+	c.runAndCheckError("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
+		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
+}
+
 // Check that a specified number of a resource type is running
 func (c *context) ensureCount(itemType string, count int, kubeconfigPath string) {
-	for retryCount := 1; retryCount <= 20; retryCount++ {
+	for retryCount := 1; retryCount <= 30; retryCount++ {
 		cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "--no-headers=true"}
-		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
-		require.NoError(c.t, err)
+		cmdResults, eout, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
+		if string(eout) != "" {
+			log.Infof("EOUT: %s, ERR: %v", eout, err)
+		}
 		if len(strings.Split(string(cmdResults), "\n")) > count { // Must be "count+1" because of ending blank line
 			return
 		}
@@ -221,15 +259,14 @@ func (c *context) ensureCount(itemType string, count int, kubeconfigPath string)
 // Check that each instance of a specified resource type is ready
 func (c *context) ensureRunning(itemType, kubeconfigPath string) {
 	cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "-o",
-		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
+		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{@.spec.unschedulable}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
 
-	for retryCount := 1; retryCount <= 20; retryCount++ {
+	for retryCount := 1; retryCount <= 30; retryCount++ {
 		allReady := true
-		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
-		require.NoError(c.t, err)
+		cmdResults, _, _ := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		strs := strings.Split(string(cmdResults), "\n")
 		for _, str := range strs {
-			if str != "" && !strings.Contains(str, "Ready=True") {
+			if str != "" && (!strings.Contains(str, "Ready=True") || strings.Contains(str, ":true:")) {
 				log.Infof("Waiting for: %s", str)
 				allReady = false
 			}
@@ -242,3 +279,214 @@ func (c *context) ensureRunning(itemType, kubeconfigPath string) {
 	}
 	require.FailNow(c.t, fmt.Sprintf("Not all %s are running...", itemType))
 }
+
+// Check that not all instances of a specified resource type are ready
+func (c *context) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
+	cmdItems := []string{"kubectl", "get", itemType, "--all-namespaces", "-o",
+		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
+
+	unreadySeen := ""
+	for retryCount := 1; retryCount <= 20; retryCount++ {
+		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
+		if err != nil {
+			time.Sleep(time.Second * 5)
+		}
+		strs := strings.Split(string(cmdResults), "\n")
+		for _, str := range strs {
+			nameAndConditions := strings.Split(str, ":")
+			if str != "" && nameAndConditions[0] != unreadySeen &&
+				(!strings.Contains(nameAndConditions[1], "Ready=True") || strings.Contains(nameAndConditions[1], ":true:")) {
+				if unreadySeen != "" {
+					return
+				}
+				unreadySeen = nameAndConditions[0]
+			}
+		}
+		log.Infof("Waiting for all %s to have stopped running, retry: %d...", itemType, retryCount)
+		time.Sleep(30 * time.Second)
+	}
+	require.FailNow(c.t, fmt.Sprintf("Some %s did not stop running...", itemType))
+}
+
+// Set up a provider-friendly environment
+func (c *context) getProviderEnvironment() []string {
+	tag, _, err := c.runCollectingOutput(filepath.Join(c.testDir, "../../../tools/image-tag"))
+	require.NoError(c.t, err)
+	return env("NAMESPACE=test", "CONTROL_PLANE_MACHINE_COUNT=2", "WORKER_MACHINE_COUNT=0", "HOME="+c.tmpDir,
+		"CONTROL_PLANE_ENDPOINT=172.17.0.2:6443", "EXISTINGINFRA_CONTROLLER_IMAGE=docker.io/weaveworks/cluster-api-existinginfra-controller:"+string(tag))
+}
+
+func (c *context) ConfigureHAProxy(loadBalancerAddress string, loadBalancerSSHPort int) {
+	log.Info("Configuring H/A proxy...")
+	keyFile := filepath.Join(c.tmpDir, "cluster-key")
+	sshClient, err := ssh.NewClient(ssh.ClientParams{
+		User:           "root",
+		Host:           loadBalancerAddress,
+		Port:           uint16(loadBalancerSSHPort),
+		PrivateKeyPath: keyFile,
+	})
+	require.NoError(c.t, err)
+	defer sshClient.Close()
+	installer, err := capeios.Identify(sshClient)
+	require.NoError(c.t, err)
+	runner := &sudo.Runner{Runner: sshClient}
+	cfg, err := envcfg.GetEnvSpecificConfig(installer.PkgType, "default", "", runner)
+	require.NoError(c.t, err)
+	// resources
+	baseResource := recipe.BuildBasePlan(installer.PkgType)
+	dockerConfigResource, err := buildDockerConfigResource(c)
+	require.NoError(c.t, err)
+	criResource := recipe.BuildCRIPlan(
+		&existinginfrav1.ContainerRuntime{
+			Kind:    "docker",
+			Package: "docker-ce",
+			Version: "19.03.8",
+		},
+		cfg,
+		installer.PkgType)
+	ips := []string{"172.17.0.3", "172.17.0.4"}
+	haConfigResource := &resource.File{
+		Content:     generateHAConfiguration(ips),
+		Destination: "/tmp/haproxy.cfg",
+	}
+	haproxyResource := &resource.Run{
+		Script:     object.String("mkdir /tmp/haproxy && docker run --detach --name haproxy -v /tmp/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg -v /tmp/haproxy:/var/lib/haproxy -p 6443:6443 haproxy"),
+		UndoScript: object.String("docker rm haproxy || true"),
+	}
+	lbPlanBuilder := plan.NewBuilder()
+	lbPlanBuilder.AddResource("install:base", baseResource)
+	lbPlanBuilder.AddResource("install:docker-repo-config", dockerConfigResource,
+		plan.DependOn("install:base"))
+	lbPlanBuilder.AddResource("install:cri", criResource, plan.DependOn("install:docker-repo-config"))
+	lbPlanBuilder.AddResource("install:ha-config", haConfigResource, plan.DependOn("install:cri"))
+	lbPlanBuilder.AddResource("install:haproxy", haproxyResource, plan.DependOn("install:ha-config"))
+
+	lbPlan, err := lbPlanBuilder.Plan()
+	require.NoError(c.t, err)
+	err = lbPlan.Undo(runner, plan.EmptyState)
+	require.NoError(c.t, err)
+	_, err = lbPlan.Apply(runner, plan.EmptyDiff())
+	require.NoError(c.t, err)
+}
+
+func generateHAConfiguration(clusterIPs []string) string {
+	var str strings.Builder
+	str.WriteString(haproxyTemplate)
+
+	for idx, IP := range clusterIPs {
+		str.WriteString(fmt.Sprintf("    server master-%d %s:6443 check\n", idx, IP))
+	}
+
+	return str.String()
+}
+
+func buildDockerConfigResource(c *context) (plan.Resource, error) {
+	manifest, eout, err := c.runCollectingOutputWithConfig(
+		commandConfig{
+			Env:    c.getProviderEnvironment(),
+			Stdout: os.Stdout,
+			Stderr: os.Stderr},
+		filepath.Join(c.tmpDir, "clusterctl"), "config", "cluster", "test-cluster", "--kubernetes-version", "1.17.5", "-n", "test")
+	if err != nil {
+		log.Infof("E: %v, OUT: %s", err, eout)
+	}
+	require.NoError(c.t, err)
+
+	b := plan.NewBuilder()
+	_, eic, err := specs.ParseCluster(ioutil.NopCloser(bytes.NewReader(manifest)))
+	require.NoError(c.t, err)
+	filespecs := &eic.Spec.OS.Files
+	for idx, srcspec := range *filespecs {
+		fileResource := &resource.File{Destination: srcspec.Destination, Content: srcspec.Source.Contents}
+		b.AddResource(fmt.Sprintf("install-config-file-%d", idx), fileResource)
+	}
+	p, err := b.Plan()
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// Determine if the temporary directory exists
+func tempDirExists(c *context) bool {
+	_, err := os.Stat(c.tmpDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+		log.Errorf("Got error attempting to stat temp directory")
+		return false
+	}
+	return true
+}
+
+const haproxyTemplate = `#---------------------------------------------------------------------
+# HAProxy configuration file for the Kubernetes API service.
+#
+# See the full configuration options online at:
+#
+#   http://haproxy.1wt.eu/download/1.4/doc/configuration.txt
+#
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# Global settings
+#---------------------------------------------------------------------
+global
+    log         127.0.0.1 local2
+
+    pidfile     /var/run/haproxy.pid
+    maxconn     4000
+    daemon
+
+    # turn on stats unix socket
+    stats socket /var/lib/haproxy/stats
+
+#---------------------------------------------------------------------
+# common defaults that all the 'listen' and 'backend' sections will
+# use if not designated in their block
+#---------------------------------------------------------------------
+defaults
+    mode                    http
+    log                     global
+    option                  httplog
+    option                  dontlognull
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          1m
+    timeout server          1m
+    timeout http-keep-alive 10s
+    timeout check           10s
+    maxconn                 3000
+
+#---------------------------------------------------------------------
+# OPTIONAL - stats UI that allows you to see which masters have joined
+#            the LB roundrobin
+#---------------------------------------------------------------------
+frontend stats
+    bind *:8404
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats admin if LOCALHOST
+
+#---------------------------------------------------------------------
+# KubeAPI frontend which proxys to the master nodes
+#---------------------------------------------------------------------
+frontend kubernetes
+    bind *:6443
+    default_backend             kubernetes
+    mode tcp
+    option tcplog
+
+backend kubernetes
+    balance     roundrobin
+    mode tcp
+    option tcp-check
+    default-server inter 10s downinter 5s rise 2 fall 2 slowstart 60s maxconn 250 maxqueue 256 weight 100
+`

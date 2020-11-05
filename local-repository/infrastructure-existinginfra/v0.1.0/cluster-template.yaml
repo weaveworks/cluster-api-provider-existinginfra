@@ -27,6 +27,7 @@ metadata:
     cluster.x-k8s.io/provider: infrastructure-existinginfra
 spec:
   kubernetesVersion: "${KUBERNETES_VERSION}"
+  controlPlaneEndpoint: "${CONTROL_PLANE_ENDPOINT}"
   controlPlaneMachineCount: "${CONTROL_PLANE_MACHINE_COUNT}"
   workerMachineCount: "${WORKER_MACHINE_COUNT}"
   workloadCluster: true

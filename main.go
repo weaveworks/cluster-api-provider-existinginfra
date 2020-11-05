@@ -105,6 +105,10 @@ func main() {
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("ExistingInfraCluster"),
 		Scheme: mgr.GetScheme(),
+		// TODO: The ControllerNamespace is originally obtained from some machines in wksctl,
+		//  which is not portable for CAPEI. That needs to be changed as well.
+		ControllerNamespace: namespace,
+		EventRecorder:       mgr.GetEventRecorderFor(providerName + "-controller"),
 	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraCluster")
 		os.Exit(1)
