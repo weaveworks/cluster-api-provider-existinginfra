@@ -552,22 +552,6 @@ func getManifest(manifestString, namespace string) ([]byte, error) {
 	return manifest.WithNamespace(serializer.FromBytes([]byte(manifestString)), namespace)
 }
 
-func sealedSecretCRDManifest(namespace string) ([]byte, error) {
-	return getManifest(sealedSecretCRDManifestString, namespace)
-}
-
-func sealedSecretControllerManifest(namespace string) ([]byte, error) {
-	return getManifest(sealedSecretControllerManifestString, namespace)
-}
-
-func fluxManifest(namespace string) ([]byte, error) {
-	return getManifest(fluxManifestString, namespace)
-}
-
-func getManifest(manifestString, namespace string) ([]byte, error) {
-	return manifest.WithNamespace(serializer.FromBytes([]byte(manifestString)), namespace)
-}
-
 const deployment = "Deployment"
 
 // updateControllerImage replaces the controller image in the manifest and

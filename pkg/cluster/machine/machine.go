@@ -4,10 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-<<<<<<< HEAD
 	"io/ioutil"
-=======
->>>>>>> a241a2e... initial start
 	"os"
 
 	"github.com/blang/semver"
@@ -68,10 +65,7 @@ func ParseManifest(file string) (ml []*clusterv1.Machine, bl []*existinginfrav1.
 	if err != nil {
 		return nil, nil, err
 	}
-<<<<<<< HEAD
 	defer f.Close()
-=======
->>>>>>> a241a2e... initial start
 	ml, bl, err = Parse(f)
 	if err != nil {
 		err = errors.Wrapf(err, "parsing %q", file)
@@ -105,7 +99,6 @@ func Parse(rc io.ReadCloser) (ml []*clusterv1.Machine, bl []*existinginfrav1.Exi
 	return
 }
 
-<<<<<<< HEAD
 // WriteManifest takes an array of Machine and ExistingInfraMachine objects and creates the
 // machines manifest file
 func WriteManifest(machines []*clusterv1.Machine, eiMachines []*existinginfrav1.ExistingInfraMachine, path string) error {
@@ -127,8 +120,6 @@ func WriteManifest(machines []*clusterv1.Machine, eiMachines []*existinginfrav1.
 	return nil
 }
 
-=======
->>>>>>> a241a2e... initial start
 // Validate validates the provided machines.
 func Validate(machines []*clusterv1.Machine, bl []*existinginfrav1.ExistingInfraMachine) field.ErrorList {
 	if len(machines) == 0 { // Some other validations crash on empty list
