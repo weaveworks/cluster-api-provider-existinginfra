@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"time"
 
@@ -73,7 +72,6 @@ const (
 	controllerName      string = "wks-controller"
 	controllerSecret    string = "wks-controller-secrets"
 	bootstrapTokenID    string = "bootstrapTokenID"
-	ipConfigKey         string = "ips"
 )
 
 // ExistingInfraMachineReconciler is responsible for managing this cluster's machines, and
@@ -86,10 +84,6 @@ type ExistingInfraMachineReconciler struct {
 	controllerNamespace string
 	eventRecorder       record.EventRecorder
 	verbose             bool
-}
-
-type machineConnectionInfo struct {
-	publicIP, privateIP, keyPath string
 }
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines,verbs=get;list;watch;create;update;patch;delete
@@ -224,18 +218,6 @@ func (a *ExistingInfraMachineReconciler) getClusterConfigMap(ctx context.Context
 		return nil, err
 	}
 	return &configMap, nil
-}
-
-func (a *ExistingInfraMachineReconciler) isMachineInClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster, ip string) (bool, error) {
-	configMap, err := a.getClusterConfigMap(ctx, eic)
-	if err != nil {
-		return false, err
-	}
-	var ips []string
-	if err := yaml.Unmarshal([]byte(configMap.Data["machines"]), &ips); err != nil {
-		return false, err
-	}
-	return isMachineInList(ip, ips), nil
 }
 
 func (a *ExistingInfraMachineReconciler) addMachineToClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster, newip string) error {
@@ -501,10 +483,6 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
-	// upToDateWithCluster, err := a.isMachineInClusterConfigMap(ctx, c, eim.Spec.Private.Address)
-	// if err != nil {
-	//  return gerrors.Wrapf(err, "Failed to determine if machine is in cluster config map")
-	// }
 	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
 	if err != nil {
 		return gerrors.Wrapf(err, "Failed to get node plan for machine %s", machine.Name)
@@ -523,10 +501,8 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	// type differences between deserialised State and State created from Plan.
 	planJSON := planState.ToJSON()
 	if currentState.ToJSON() == planJSON {
-		//		if upToDateWithCluster {
 		contextLog.Info("Machine and node have matching plans; nothing to do")
 		return nil
-		//		}
 	}
 
 	if diffedPlan, err := currentState.Diff(planState); err == nil {
@@ -1044,7 +1020,7 @@ func (a *ExistingInfraMachineReconciler) findMachineByPrivateAddress(ctx context
 			return &machine, nil
 		}
 	}
-	return nil, errors.New(fmt.Sprintf("Could not locate machine with private address: %s", addr))
+	return nil, fmt.Errorf("Could not locate machine with private address: %s", addr)
 }
 
 // getNodePrivateAddress looks through the addresses for a node and extracts the private address
@@ -1124,21 +1100,6 @@ func getInternalAddress(node *corev1.Node) (string, error) {
 		}
 	}
 	return "", errors.New("no InternalIP address found")
-}
-
-func allocateIPs(numIPs int) ([]machineConnectionInfo, error) {
-	ipJson, err := ioutil.ReadFile(ipConfigKey)
-	if err != nil {
-		return nil, err
-	}
-	var ips []machineConnectionInfo
-	if err := json.Unmarshal(ipJson, &ips); err != nil {
-		return nil, err
-	}
-	if len(ips) < numIPs {
-		return nil, fmt.Errorf("Insufficient IPs to create cluster, need: %d, have: %d", numIPs, len(ips))
-	}
-	return ips[0:numIPs], nil
 }
 
 func (a *ExistingInfraMachineReconciler) recordEvent(object runtime.Object, eventType, reason, messageFmt string, args ...interface{}) {
@@ -1221,8 +1182,8 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		for idx := range specByteHash {
 			if specByteHash[idx] != existingSpecHash[idx] {
 				differ = true
+				break
 			}
-			break
 		}
 		if !differ {
 			return nil
@@ -1317,7 +1278,10 @@ func (a *ExistingInfraMachineReconciler) updateConfigMap(ctx context.Context, na
 			log.Errorf("failed to read config map, can't reschedule: %v", getErr)
 			return getErr
 		}
-		updater(&result)
+		if err := updater(&result); err != nil {
+			log.Errorf("failed to update cluster: %v", err)
+			return err
+		}
 		updateErr := a.Client.Update(ctx, &result)
 		if updateErr != nil {
 			log.Errorf("failed to reschedule config map: %v", updateErr)

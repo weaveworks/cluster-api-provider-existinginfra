@@ -110,11 +110,12 @@ func (c *testContext) getOS() string {
 	require.NoError(c.t, err)
 	os := string(osbytes)
 	//nolint:gocritic // This is fine.
-	if strings.HasPrefix(os, "Linux") {
+	switch {
+	case strings.HasPrefix(os, "Linux"):
 		return "linux"
-	} else if strings.HasPrefix(os, "Darwin") {
+	case strings.HasPrefix(os, "Darwin"):
 		return "darwin"
-	} else {
+	default:
 		require.FailNow(c.t, fmt.Sprintf("Unknown operating system: '%s'", os))
 	}
 	return ""
@@ -416,19 +417,6 @@ func buildDockerConfigResource(c *testContext) (plan.Resource, error) {
 		return nil, err
 	}
 	return &p, nil
-}
-
-// Determine if the temporary directory exists
-func tempDirExists(c *testContext) bool {
-	_, err := os.Stat(c.tmpDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-		log.Errorf("Got error attempting to stat temp directory")
-		return false
-	}
-	return true
 }
 
 const haproxyTemplate = `#---------------------------------------------------------------------

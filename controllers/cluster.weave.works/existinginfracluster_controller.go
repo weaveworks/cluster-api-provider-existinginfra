@@ -161,7 +161,7 @@ func (r *ExistingInfraClusterReconciler) findMachineByPrivateAddress(ctx context
 			return &machine, nil
 		}
 	}
-	return nil, errors.New(fmt.Sprintf("Could not locate machine with private address: %s", addr))
+	return nil, fmt.Errorf("Could not locate machine with private address: %s", addr)
 }
 
 func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
@@ -175,7 +175,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 		return err
 	}
 	totalMachineCount := controlPlaneCount + workerCount
-	machineInfo, err := r.allocate(ctx, totalMachineCount, eic.Namespace)
+	machineInfo, err := r.allocate(ctx, totalMachineCount, r.ControllerNamespace)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,9 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 			log.Infof("Panic value: %v", val)
 			finalError = errors.New("Panic occurred!")
 			//nolint:errcheck
-			r.deallocate(ctx, machineInfo, r.ControllerNamespace)
+			if err := r.deallocate(ctx, machineInfo, r.ControllerNamespace); err != nil {
+				log.Errorf("Failed to deallocate machines")
+			}
 		}
 	}()
 
@@ -206,24 +208,13 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	log.Infof("Created machines...")
 	initError := r.initiateCluster(ctx, cluster, eic, machines, eims, machineInfo)
 	if initError != nil && finalError == nil { // no panic
-		//nolint:errcheck
-		r.deallocate(ctx, machineInfo, r.ControllerNamespace)
+		if err := r.deallocate(ctx, machineInfo, r.ControllerNamespace); err != nil {
+			log.Errorf("Failed to deallocate machines")
+		}
 		return gerrors.Wrapf(initError, "Failed to initiate cluster")
 	}
 
 	return finalError
-}
-
-func (r *ExistingInfraClusterReconciler) machinesCreated(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) (bool, error) {
-	var machines clusterv1.MachineList
-	err := r.Client.List(ctx, &machines, &client.ListOptions{Namespace: eic.Namespace})
-	if err != nil {
-		return false, err
-	}
-	if len(machines.Items) > 0 {
-		return true, nil
-	}
-	return false, nil
 }
 
 func (r *ExistingInfraClusterReconciler) newBuilderWithMgr(mgr ctrl.Manager) *builder.Builder {
@@ -376,10 +367,12 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrapf(err, "failed to create cluster config map")
 	}
 
-	if err = r.modifyEIC(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+	log.Infof("Created cluster config map: %s/%s", r.ControllerNamespace, eic.Name)
+
+	if err := r.modifyEIC(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
 		eic.Status.Ready = true
 	}); err != nil {
-		return gerrors.Wrap(err, "Failed to set node status to Ready")
+		return gerrors.Wrapf(err, "failed to mark cluster as ready")
 	}
 
 	log.Infof("Finished setting up seed node: %s", seedNodeIP)
@@ -477,7 +470,7 @@ func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machine
 	}
 	log.Info("Got secret for deallocation")
 	jsonData := secret.Data["config"]
-	var info []capeios.MachineInfo
+	info := []capeios.MachineInfo{}
 	if err := json.Unmarshal(jsonData, &info); err != nil {
 		return err
 	}
