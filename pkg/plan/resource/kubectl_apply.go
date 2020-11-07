@@ -114,7 +114,6 @@ func (ka *KubectlApply) Apply(ctx context.Context, runner plan.Runner, diff plan
 		return false, err
 	}
 
-	log.Infof("KA CONTENT TO APPLY: %s", c)
 	if str(ka.Namespace) != "" {
 		content, err := manifest.WithNamespace(serializer.FromBytes(c), str(ka.Namespace))
 		if err != nil {
