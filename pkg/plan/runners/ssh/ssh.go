@@ -38,7 +38,7 @@ const tcp = "tcp"
 // NewClient instantiates a new SSH Client object.
 // N.B.: provide either the key (privateKey) or its path (privateKeyPath).
 func NewClient(params ClientParams) (*Client, error) {
-	log.WithFields(log.Fields{"user": params.User, "host": params.Host, "port": params.Port, "privateKeyPath": params.PrivateKeyPath, "printOutputs": params.PrintOutputs}).Debugf("creating SSH client")
+	log.WithFields(log.Fields{"user": params.User, "host": params.Host, "port": params.Port, "privateKeyPath": params.PrivateKeyPath, "printOutputs": params.PrintOutputs}).Infof("creating SSH client")
 	signer, err := sshutil.SignerFromPrivateKey(params.PrivateKeyPath, params.PrivateKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read private key from \"%s\"", params.PrivateKeyPath)

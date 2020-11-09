@@ -63,6 +63,42 @@ func BuildConfigPlan(files []*resource.File) plan.Resource {
 	return &p
 }
 
+// BuildConfigMapPlan creates a plan to handle config maps
+func BuildConfigMapPlan(manifests map[string][]byte, namespace string) plan.Resource {
+	b := plan.NewBuilder()
+	for name, manifest := range manifests {
+		remoteName := fmt.Sprintf("config-map-%s", name)
+		b.AddResource("install:"+remoteName, &resource.KubectlApply{Filename: object.String(remoteName), Manifest: manifest, Namespace: object.String(namespace)})
+	}
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return &p
+}
+
+// BuildCNIPlan creates a sub-plan to install the CNI plugin.
+func BuildCNIPlan(cni string, manifests [][]byte) plan.Resource {
+	b := plan.NewBuilder()
+
+	b.AddResource(
+		"install-cni:apply-manifests",
+		&resource.KubectlApply{Manifest: manifests[0], Filename: object.String(cni + ".yaml")},
+	)
+	if len(manifests) == 2 {
+		b.AddResource(
+			"install-cni:apply-manifests-ds",
+			&resource.KubectlApply{Manifest: manifests[1], Filename: object.String(cni + "-daemon-set" + ".yaml")},
+			plan.DependOn("install-cni:apply-manifests"))
+	}
+
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return &p
+}
+
 // BuildCRIPlan creates a plan for installing a CRI.  Currently, Docker is the only supported CRI
 func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime, cfg *envcfg.EnvSpecificConfig, pkgType resource.PkgType) plan.Resource {
 	b := plan.NewBuilder()
@@ -320,6 +356,24 @@ func BuildKubeadmPrejoinPlan(kubernetesVersion string, useIPTables bool) plan.Re
 		"configure:kubeadm-force-reset",
 		&resource.Run{Script: object.String("kubeadm reset --force")},
 	)
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	return &p
+}
+
+// BuildSealedSecretPlan creates a sub-plan to install sealed secrets so we can check secrets into GitHub for GitOps
+func BuildSealedSecretPlan(sealedSecretVersion, crdManifest, keyManifest, controllerManifest []byte) plan.Resource {
+	b := plan.NewBuilder()
+	b.AddResource("install:sealed-secret-crd",
+		&resource.KubectlApply{Manifest: crdManifest, Filename: object.String("SealedSecretCRD.yaml"),
+			WaitCondition: "condition=Established"})
+
+	b.AddResource("install:sealed-secrets-key", &resource.KubectlApply{Manifest: keyManifest})
+	b.AddResource("install:sealed-secrets-controller",
+		&resource.KubectlApply{Manifest: controllerManifest, Filename: object.String("SealedSecretController.yaml")},
+		plan.DependOn("install:sealed-secrets-key"))
 	p, err := b.Plan()
 	if err != nil {
 		log.Fatalf("%v", err)

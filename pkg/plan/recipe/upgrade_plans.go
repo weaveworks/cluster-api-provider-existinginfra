@@ -21,23 +21,48 @@ const (
 func BuildUpgradePlan(pkgType resource.PkgType, k8sVersion string, ntype NodeType) (plan.Resource, error) {
 	b := plan.NewBuilder()
 
+	// install new packages - kubelet and kubectl need to be installed before kubeadm
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
 		b.AddResource(
 			"upgrade:node-unlock-kubernetes",
 			&resource.Run{Script: object.String("yum versionlock delete 'kube*' || true")})
 		b.AddResource(
+			"upgrade:node-kubelet",
+			&resource.RPM{Name: "kubelet", Version: k8sVersion, DisableExcludes: "kubernetes"},
+			plan.DependOn("upgrade:node-unlock-kubernetes"))
+		b.AddResource(
+			"upgrade:node-kubectl",
+			&resource.RPM{Name: "kubectl", Version: k8sVersion, DisableExcludes: "kubernetes"},
+			plan.DependOn("upgrade:node-kubelet"))
+		b.AddResource(
 			"upgrade:node-install-kubeadm",
 			&resource.RPM{Name: "kubeadm", Version: k8sVersion, DisableExcludes: "kubernetes"},
-			plan.DependOn("upgrade:node-unlock-kubernetes"))
+			plan.DependOn("upgrade:node-kubectl"))
+		b.AddResource(
+			"upgrade:node-lock-kubernetes",
+			&resource.Run{Script: object.String("yum versionlock add 'kube*' || true")},
+			plan.DependOn("upgrade:node-install-kubeadm"))
 	case resource.PkgTypeDeb:
 		b.AddResource(
 			"upgrade:node-unlock-kubernetes",
 			&resource.Run{Script: object.String("apt-mark unhold 'kube*' || true")})
 		b.AddResource(
+			"upgrade:node-kubelet",
+			&resource.Deb{Name: "kubelet", Suffix: "=" + k8sVersion + "-00"},
+			plan.DependOn("upgrade:node-unlock-kubernetes"))
+		b.AddResource(
+			"upgrade:node-kubectl",
+			&resource.Deb{Name: "kubectl", Suffix: "=" + k8sVersion + "-00"},
+			plan.DependOn("upgrade:node-kubelet"))
+		b.AddResource(
 			"upgrade:node-install-kubeadm",
 			&resource.Deb{Name: "kubeadm", Suffix: "=" + k8sVersion + "-00"},
-			plan.DependOn("upgrade:node-unlock-kubernetes"))
+			plan.DependOn("upgrade:node-kubectl"))
+		b.AddResource(
+			"upgrade:node-lock-kubernetes",
+			&resource.Run{Script: object.String("apt-mark hold 'kube*' || true")},
+			plan.DependOn("upgrade:node-install-kubeadm"))
 	}
 	//
 	// For secondary masters
@@ -63,45 +88,23 @@ func BuildUpgradePlan(pkgType resource.PkgType, k8sVersion string, ntype NodeTyp
 	case Worker:
 		b.AddResource(
 			"upgrade:node-kubeadm-upgrade",
-			&resource.Run{Script: object.String(fmt.Sprintf("kubeadm upgrade node config --kubelet-version %s", k8sVersion))},
+			// From kubeadm upgrade node phase kubelet-config --help
+			// > kubeadm uses the KuberneteVersion field in the kubeadm-config ConfigMap to determine what the _desired_ kubelet version is.
+			&resource.Run{Script: object.String("kubeadm upgrade node phase kubelet-config")},
 			plan.DependOn("upgrade:node-install-kubeadm"))
 	}
 
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
 		b.AddResource(
-			"upgrade:node-kubelet",
-			&resource.RPM{Name: "kubelet", Version: k8sVersion, DisableExcludes: "kubernetes"},
-			plan.DependOn("upgrade:node-kubeadm-upgrade"))
-		b.AddResource(
 			"upgrade:node-restart-kubelet",
 			&resource.Run{Script: object.String("systemctl restart kubelet")},
-			plan.DependOn("upgrade:node-kubelet"))
-		b.AddResource(
-			"upgrade:node-kubectl",
-			&resource.RPM{Name: "kubelet", Version: k8sVersion, DisableExcludes: "kubernetes"},
-			plan.DependOn("upgrade:node-restart-kubelet"))
-		b.AddResource(
-			"upgrade:node-lock-kubernetes",
-			&resource.Run{Script: object.String("yum versionlock add 'kube*' || true")},
-			plan.DependOn("upgrade:node-kubectl"))
+			plan.DependOn("upgrade:node-kubeadm-upgrade"))
 	case resource.PkgTypeDeb:
 		b.AddResource(
-			"upgrade:node-kubelet",
-			&resource.Deb{Name: "kubelet", Suffix: "=" + k8sVersion + "-00"},
-			plan.DependOn("upgrade:node-kubeadm-upgrade"))
-		b.AddResource(
 			"upgrade:node-restart-kubelet",
 			&resource.Run{Script: object.String("systemctl restart kubelet")},
-			plan.DependOn("upgrade:node-kubelet"))
-		b.AddResource(
-			"upgrade:node-kubectl",
-			&resource.Deb{Name: "kubectl", Suffix: "=" + k8sVersion + "-00"},
-			plan.DependOn("upgrade:node-restart-kubelet"))
-		b.AddResource(
-			"upgrade:node-lock-kubernetes",
-			&resource.Run{Script: object.String("apt-mark hold 'kube*' || true")},
-			plan.DependOn("upgrade:node-kubectl"))
+			plan.DependOn("upgrade:node-kubeadm-upgrade"))
 	}
 
 	p, err := b.Plan()

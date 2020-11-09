@@ -37,15 +37,12 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-// TODO: Ported from wksctl, should be removed
-const defaultNamespace = `weavek8sops`
-
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 
 	// TODO: Concurrent reconciliations should not be limited, remove this when
-	// 	the ExistingInfra{Cluster,Machine} reconcilers have been refactored
+	//  the ExistingInfra{Cluster,Machine} reconcilers have been refactored
 	opts = controller.Options{MaxConcurrentReconciles: 1}
 )
 
@@ -76,6 +73,9 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	// Get the controller's namespace via downward API
+	namespace := os.Getenv("POD_NAMESPACE")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
@@ -119,7 +119,7 @@ func main() {
 		ClientSet:     clientSet,
 		// TODO: The ControllerNamespace is originally obtained from some machines in wksctl,
 		//  which is not portable for CAPEI. That needs to be changed as well.
-		ControllerNamespace: defaultNamespace,
+		ControllerNamespace: namespace,
 		Verbose:             verbose,
 	}).SetupWithManagerOptions(mgr, opts); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExistingInfraMachine")

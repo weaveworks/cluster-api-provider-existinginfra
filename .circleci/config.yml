@@ -7,9 +7,18 @@ defaults: &defaults
       environment:
         GOPATH: /go/
         SRCDIR: /src/github.com/weaveworks/wksctl
-        KUBECTL_URL: https://dl.k8s.io/v1.10.5/kubernetes-client-linux-amd64.tar.gz
-        KUBECTL_CHECKSUM: da9d557989a0b9671a610f21642052febb8f70c3cf144c98a8a4f7ecab6bafe2
-  working_directory: /src/github.com/weaveworks/wksctl
+        KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
+        KUBECTL_CHECKSUM: 2096615904534a381d02ec15d62fe4e7fb80ef0d8e5fcfee2e71ba94771adfab
+  working_directory: /home/circleci/src/github.com/weaveworks/cluster-api-provider-existinginfra
+
+integrationTestCommonEnv: &integrationTestCommonEnv
+  SRCDIR: /src/github.com/weaveworks/wks
+  KUBECTL_URL: https://dl.k8s.io/v1.18.3/kubernetes-client-linux-amd64.tar.gz
+  KUBECTL_CHECKSUM: 2096615904534a381d02ec15d62fe4e7fb80ef0d8e5fcfee2e71ba94771adfab
+  NAMESPACE: test
+  CONTROL_PLANE_MACHINE_COUNT: 1
+  WORKER_MACHINE_COUNT: 1
+  KUBERNETES_VERSION: 1.17.7
 
 workflows:
   version: 2
@@ -19,7 +28,19 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - unit-tests: {}
+      - unit-tests
+      - integration-tests:
+          requires:
+            - build
+      - release:
+          requires:
+            - build
+            - unit-tests
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/
 
 jobs:
   build:
@@ -50,3 +71,28 @@ jobs:
           command: |
             go version
             make test
+  integration-tests:
+    machine:
+      image: ubuntu-1604:202004-01
+    environment:
+      <<: *integrationTestCommonEnv
+    working_directory: /home/circleci/src/github.com/weaveworks/cluster-api-provider-existinginfra
+    steps:
+      - checkout
+      - run:
+          name: Install kubectl
+          command: |
+            curl -L $KUBECTL_URL -o kubectl.tar.gz
+            echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
+            tar xvzf kubectl.tar.gz --strip-components=3
+            sudo mv kubectl /usr/local/bin
+      - run:
+          name: Run integration tests
+          command: |
+            IMAGE_TAG=$(./tools/image-tag)
+            EXISTINGINFRA_CONTROLLER_IMAGE="weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}"
+            go version
+            cd test/integration/test
+            go test --timeout=99999s
+          no_output_timeout: 30m
+

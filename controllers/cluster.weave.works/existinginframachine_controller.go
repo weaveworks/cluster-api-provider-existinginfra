@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -55,6 +56,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -81,6 +83,7 @@ type ExistingInfraMachineReconciler struct {
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;patch
 
 func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.TODO() // upstream will add this eventually
@@ -151,6 +154,7 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 
 	// Object still there but with deletion timestamp => run our finalizer
 	if !eim.ObjectMeta.DeletionTimestamp.IsZero() {
+		controllerutil.RemoveFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
 		err := a.delete(ctx, eic, machine, eim)
 		if err != nil {
 			contextLog.Errorf("failed to delete machine: %v", err)
@@ -184,7 +188,7 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
-	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToJSON()); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
 		return err
 	}
 	// CAPI machine controller requires providerID
@@ -195,13 +199,19 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 }
 
 func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, m *existinginfrav1.ExistingInfraMachine) (*os.OS, io.Closer, error) {
-	sshKey, err := a.sshKey(ctx)
+	privateAddress := a.getMachineAddress(m)
+	info, err := a.getMachineInfo(ctx, privateAddress)
 	if err != nil {
-		return nil, nil, gerrors.Wrap(err, "failed to read SSH key")
+		return nil, nil, err
 	}
+	sshKey, err := getSSHKey(info)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	sshClient, err := ssh.NewClient(ssh.ClientParams{
-		User:         c.Spec.User,
-		Host:         a.getMachineAddress(m),
+		User:         info.SSHUser,
+		Host:         privateAddress,
 		Port:         m.Spec.Private.Port,
 		PrivateKey:   sshKey,
 		PrintOutputs: a.verbose,
@@ -216,13 +226,39 @@ func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *exist
 	return os, sshClient, nil
 }
 
-func (a *ExistingInfraMachineReconciler) sshKey(ctx context.Context) ([]byte, error) {
+func (a *ExistingInfraMachineReconciler) getMachineInfo(ctx context.Context, privateAddress string) (os.MachineInfo, error) {
 	var secret corev1.Secret
-	err := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: controllerSecret}, &secret)
+	err := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: ConnectionSecretName}, &secret)
 	if err != nil {
-		return nil, gerrors.Wrap(err, "failed to get WKS' secret")
+		return os.MachineInfo{}, gerrors.Wrap(err, "failed to get connection secret")
 	}
-	return secret.Data["sshKey"], nil
+	pool := secret.Data["config"]
+	var info []os.MachineInfo
+	if err := json.Unmarshal(pool, &info); err != nil {
+		return os.MachineInfo{}, gerrors.Wrap(err, "failed to unmarshal secret")
+	}
+	return a.getMachineInfoOrUseDefault(ctx, &info, privateAddress)
+}
+
+func (a *ExistingInfraMachineReconciler) getMachineInfoOrUseDefault(ctx context.Context, mi *[]os.MachineInfo, privateAddress string) (os.MachineInfo, error) {
+	type infoKey struct {
+		u string
+		p string
+	}
+	uniqInfos := make(map[infoKey]interface{})
+	for _, m := range *mi {
+		if m.PrivateIP == privateAddress {
+			return m, nil
+		}
+		uniqInfos[infoKey{u: m.SSHUser, p: m.SSHKey}] = nil
+	}
+	// if we don't find a user/key for this private IP and all of the entries are the same,
+	// return the first one
+	// TODO: Add an info for this private address
+	if len(uniqInfos) == 1 {
+		return (*mi)[0], nil
+	}
+	return os.MachineInfo{}, fmt.Errorf("No machine information found for: %s", privateAddress)
 }
 
 // kubeadmJoinSecrets groups the values available in the wks-controller-secrets
@@ -374,7 +410,15 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	addr := a.getMachineAddress(eim)
 	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
-		if apierrs.IsNotFound(err) { // isn't there; try to create it
+		if apierrs.IsNotFound(err) {
+			// isn't there; try to create it
+
+			// Since ExistingInfra controller handles boostrapping, add the
+			// finalizer here to ensure we cleanup no delete
+			controllerutil.AddFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
+			if err := a.Client.Update(ctx, eim); err != nil {
+				return err
+			}
 			return a.create(ctx, installer, c, machine, eim)
 		}
 		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
@@ -383,6 +427,12 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
+	}
+	isMaster := isMaster(node)
+	if isMaster {
+		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
+			return err
+		}
 	}
 	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
 	if err != nil {
@@ -414,12 +464,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	}
 
 	contextLog.Infof("........................NEW UPDATE FOR: %s...........................", machine.Name)
-	isMaster := isMaster(node)
-	if isMaster {
-		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
-			return err
-		}
-	}
+
 	upOrDowngrade := isUpOrDowngrade(machine, node)
 	contextLog.Infof("Is master: %t, is up or downgrade: %t", isMaster, upOrDowngrade)
 	if upOrDowngrade {

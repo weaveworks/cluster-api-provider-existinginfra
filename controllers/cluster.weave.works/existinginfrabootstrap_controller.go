@@ -43,6 +43,9 @@ func (r *ExistingInfraBootstrapReconciler) Reconcile(req ctrl.Request) (ctrl.Res
 
 	// your logic here
 
+	// The ExistingInfraMachine performs both the bootstrapping and infrastructure
+	// support.
+
 	return ctrl.Result{}, nil
 }
 

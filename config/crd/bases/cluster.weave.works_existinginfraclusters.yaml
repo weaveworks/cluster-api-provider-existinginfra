@@ -104,6 +104,10 @@ spec:
               type: string
             controlPlaneEndpoint:
               type: string
+            controlPlaneMachineCount:
+              type: string
+            controllerImage:
+              type: string
             cri:
               properties:
                 kind:
@@ -133,6 +137,8 @@ spec:
                 - value
                 type: object
               type: array
+            kubernetesVersion:
+              type: string
             os:
               properties:
                 files:
@@ -143,6 +149,8 @@ spec:
                       source:
                         properties:
                           configmap:
+                            type: string
+                          contents:
                             type: string
                           key:
                             type: string
@@ -160,6 +168,10 @@ spec:
               type: string
             user:
               type: string
+            workerMachineCount:
+              type: string
+            workloadCluster:
+              type: boolean
           required:
           - cri
           - user
