@@ -67,14 +67,6 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install kubectl
-          command: |
-            curl -L $KUBECTL_URL -o kubectl.tar.gz
-            echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
-            tar xvzf kubectl.tar.gz --strip-components=3
-            sudo mv kubectl /usr/local/bin
-
-      - run:
           name: Run unit tests
           command: |
             go version
@@ -103,8 +95,4 @@ jobs:
             cd test/integration/test
             go test --timeout=99999s
           no_output_timeout: 30m
-  release:
-    <<: *defaults
-    steps:
-      - checkout
-      - run: curl -sL https://git.io/goreleaser | IMAGE_TAG=`tools/image-tag` bash
+

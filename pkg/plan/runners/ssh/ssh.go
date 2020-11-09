@@ -2,6 +2,7 @@ package ssh
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -68,7 +69,7 @@ func NewClient(params ClientParams) (*Client, error) {
 // RunCommand executes the provided command on the remote machine configured in
 // this Client object. A new Session is created for each call to RunCommand.
 // A Client supports multiple interactive sessions.
-func (c *Client) RunCommand(command string, stdin io.Reader) (string, error) {
+func (c *Client) RunCommand(ctx context.Context, command string, stdin io.Reader) (string, error) {
 	log.Debugf("running command: %s", command)
 	return c.handleSessionIO(func(session *ssh.Session) error {
 		session.Stdin = stdin

@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -24,8 +25,8 @@ func (ka *KubectlAnnotateSingleNode) State() plan.State {
 }
 
 // Apply fetches the node name and performs a "kubectl annotate".
-func (ka *KubectlAnnotateSingleNode) Apply(runner plan.Runner, diff plan.Diff) (bool, error) {
-	output, err := runner.RunCommand(WithoutProxy("kubectl get nodes -o name"), nil)
+func (ka *KubectlAnnotateSingleNode) Apply(ctx context.Context, runner plan.Runner, diff plan.Diff) (bool, error) {
+	output, err := runner.RunCommand(ctx, WithoutProxy("kubectl get nodes -o name"), nil)
 	if err != nil {
 		return false, errors.Wrapf(err, "could not fetch node name to annotate")
 	}
@@ -34,16 +35,16 @@ func (ka *KubectlAnnotateSingleNode) Apply(runner plan.Runner, diff plan.Diff) (
 	if strings.Contains(nodeName, "\n") {
 		return false, fmt.Errorf("unexpected output in node name: %q", output)
 	}
-	path, err := writeTempFile(runner, []byte(ka.Value), "node_annotation")
+	path, err := writeTempFile(ctx, runner, []byte(ka.Value), "node_annotation")
 	if err != nil {
 		return false, errors.Wrap(err, "writeTempFile")
 	}
 	//nolint:errcheck
-	defer runner.RunCommand(fmt.Sprintf("rm -vf %q", path), nil)
+	defer runner.RunCommand(ctx, fmt.Sprintf("rm -vf %q", path), nil)
 
 	cmd := fmt.Sprintf("kubectl annotate %q %s=\"$(cat %s)\"", nodeName, ka.Key, path)
 
-	if stdouterr, err := runner.RunCommand(WithoutProxy(cmd), nil); err != nil {
+	if stdouterr, err := runner.RunCommand(ctx, WithoutProxy(cmd), nil); err != nil {
 		return false, errors.Wrapf(err, "failed to apply annotation %s on %s; output %s", ka.Key, nodeName, stdouterr)
 	}
 

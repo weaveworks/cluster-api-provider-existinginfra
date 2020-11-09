@@ -275,7 +275,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	log.Infof("Got ssh client...")
 	defer sshClient.Close()
 	log.Infof("Connected to %s via ssh", sp.GetMasterPublicAddress())
-	installer, err := capeios.Identify(sshClient)
+	installer, err := capeios.Identify(ctx, sshClient)
 	if err != nil {
 		return gerrors.Wrapf(err, "failed to identify operating system for seed node (%s)", sp.GetMasterPublicAddress())
 	}
@@ -315,7 +315,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	}
 
 	log.Infof("About to set up seed node: %s", sp.GetMasterPublicAddress())
-	if err := capeios.SetupSeedNode(installer, capeios.SeedNodeParams{
+	if err := capeios.SetupSeedNode(ctx, installer, capeios.SeedNodeParams{
 		PublicIP:             sp.GetMasterPublicAddress(),
 		PrivateIP:            sp.GetMasterPrivateAddress(),
 		ServicesCIDRBlocks:   sp.Cluster.Spec.ClusterNetwork.Services.CIDRBlocks,

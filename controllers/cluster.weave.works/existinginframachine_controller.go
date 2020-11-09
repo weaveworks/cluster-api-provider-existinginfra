@@ -91,13 +91,13 @@ type machineConnectionInfo struct {
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;patch
 
-func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
+func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reterr error) {
 	ctx := context.TODO() // upstream will add this eventually
 	contextLog := log.WithField("name", req.NamespacedName)
 
 	// request only contains the name of the object, so fetch it from the api-server
 	eim := &existinginfrav1.ExistingInfraMachine{}
-	err := r.Client.Get(ctx, req.NamespacedName, eim)
+	err := a.Client.Get(ctx, req.NamespacedName, eim)
 	if err != nil {
 		if apierrs.IsNotFound(err) { // isn't there; give in
 			return ctrl.Result{}, nil
@@ -106,7 +106,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	}
 
 	// Get Machine via OwnerReferences
-	machine, err := util.GetOwnerMachine(ctx, r.Client, eim.ObjectMeta)
+	machine, err := util.GetOwnerMachine(ctx, a.Client, eim.ObjectMeta)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -117,7 +117,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	contextLog = contextLog.WithField("machine", machine.Name)
 
 	// Get Cluster via label "cluster.x-k8s.io/cluster-name"
-	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, machine.ObjectMeta)
+	cluster, err := util.GetClusterFromMetadata(ctx, a.Client, machine.ObjectMeta)
 	if err != nil {
 		contextLog.Info("Machine is missing cluster label or cluster does not exist")
 		return ctrl.Result{}, nil
@@ -135,7 +135,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, nil
 	}
 	eic := &existinginfrav1.ExistingInfraCluster{}
-	if err := r.Client.Get(ctx, client.ObjectKey{
+	if err := a.Client.Get(ctx, client.ObjectKey{
 		Namespace: eim.Namespace,
 		Name:      cluster.Spec.InfrastructureRef.Name,
 	}, eic); err != nil {
@@ -144,7 +144,7 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	}
 
 	// Initialize the patch helper
-	patchHelper, err := patch.NewHelper(eim, r.Client)
+	patchHelper, err := patch.NewHelper(eim, a.Client)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -161,14 +161,14 @@ func (r *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 	// Object still there but with deletion timestamp => run our finalizer
 	if !eim.ObjectMeta.DeletionTimestamp.IsZero() {
 		controllerutil.RemoveFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
-		err := r.delete(ctx, eic, machine, eim)
+		err := a.delete(ctx, eic, machine, eim)
 		if err != nil {
 			contextLog.Errorf("failed to delete machine: %v", err)
 		}
 		return ctrl.Result{}, err
 	}
 
-	err = r.update(ctx, eic, machine, eim)
+	err = a.update(ctx, eic, machine, eim)
 	if err != nil {
 		contextLog.Errorf("failed to update machine: %v", err)
 	}
@@ -183,7 +183,7 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err != nil {
 		return err
 	}
-	if err := installer.SetupNode(nodePlan); err != nil {
+	if err := installer.SetupNode(ctx, nodePlan); err != nil {
 		return gerrors.Wrapf(err, "failed to set up machine %s", machine.Name)
 	}
 	addr := a.getMachineAddress(eim)
@@ -194,11 +194,11 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
 	}
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
 		return err
 	}
 	// CAPI machine controller requires providerID
-	eim.Spec.ProviderID = node.Spec.ProviderID
+	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
 	a.recordEvent(machine, corev1.EventTypeNormal, "Create", "created machine %s", machine.Name)
 	return nil
@@ -225,7 +225,7 @@ func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *exist
 	if err != nil {
 		return nil, nil, gerrors.Wrapf(err, "failed to create SSH client using %v", m.Spec.Private)
 	}
-	os, err := os.Identify(sshClient)
+	os, err := os.Identify(ctx, sshClient)
 	if err != nil {
 		return nil, nil, gerrors.Wrapf(err, "failed to identify machine %s's operating system", a.getMachineAddress(m))
 	}
@@ -303,10 +303,10 @@ func (a *ExistingInfraMachineReconciler) kubeadmJoinSecrets(ctx context.Context)
 	}, nil
 }
 
-func (a *ExistingInfraMachineReconciler) updateKubeadmJoinSecrets(ctx context.Context, ID string, secret *corev1.Secret) error {
-	len := base64.StdEncoding.EncodedLen(len(ID))
+func (a *ExistingInfraMachineReconciler) updateKubeadmJoinSecrets(ctx context.Context, id string, secret *corev1.Secret) error {
+	len := base64.StdEncoding.EncodedLen(len(id))
 	enc := make([]byte, len)
-	base64.StdEncoding.Encode(enc, []byte(ID))
+	base64.StdEncoding.Encode(enc, []byte(id))
 	patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\"}}", bootstrapTokenID, enc))
 	err := a.Client.Patch(ctx, secret, client.RawPatch(types.StrategicMergePatchType, patch))
 	if err != nil {
@@ -315,9 +315,9 @@ func (a *ExistingInfraMachineReconciler) updateKubeadmJoinSecrets(ctx context.Co
 	return err
 }
 
-func (a *ExistingInfraMachineReconciler) token(ctx context.Context, ID string) (string, error) {
+func (a *ExistingInfraMachineReconciler) token(ctx context.Context, id string) (string, error) {
 	ns := "kube-system"
-	name := fmt.Sprintf("%s%s", bootstrapapi.BootstrapTokenSecretPrefix, ID)
+	name := fmt.Sprintf("%s%s", bootstrapapi.BootstrapTokenSecretPrefix, id)
 	secret := &corev1.Secret{}
 	err := a.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, secret)
 	if err != nil {
@@ -328,14 +328,12 @@ func (a *ExistingInfraMachineReconciler) token(ctx context.Context, ID string) (
 			return "", gerrors.Wrapf(err, "failed to find old secret %s/%s or generate a new one", ns, name)
 		}
 		secret = newSecret
-	} else {
-		if bootstrapTokenHasExpired(secret) {
-			newSecret, err := a.installNewBootstrapToken(ctx, ns)
-			if err != nil {
-				return "", gerrors.Wrapf(err, "failed to replace expired secret %s/%s with a new one", ns, name)
-			}
-			secret = newSecret
+	} else if bootstrapTokenHasExpired(secret) {
+		newSecret, err := a.installNewBootstrapToken(ctx, ns)
+		if err != nil {
+			return "", gerrors.Wrapf(err, "failed to replace expired secret %s/%s with a new one", ns, name)
 		}
+		secret = newSecret
 	}
 	tokenID, ok := secret.Data[bootstrapapi.BootstrapTokenIDKey]
 	if !ok {
@@ -514,7 +512,8 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		}
 		contextLog.Infof("Is controller: %t", isController)
 		if isMaster {
-			if isController {
+			switch {
+			case isController:
 				// If there is no error, this will end the run of this reconciliation since the controller will be migrated
 				if err := drain.Drain(node, a.clientSet, drain.Params{
 					Force:               true,
@@ -523,9 +522,9 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 				}); err != nil {
 					return err
 				}
-			} else if isOriginal {
+			case isOriginal:
 				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.OriginalMaster)
-			} else {
+			default:
 				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.SecondaryMaster)
 			}
 		}
@@ -536,11 +535,11 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		return err
 	}
 
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, planJSON); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
 		return err
 	}
 	// CAPI machine controller requires providerID
-	eim.Spec.ProviderID = node.Spec.ProviderID
+	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
 
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
@@ -565,7 +564,7 @@ func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Contex
 	if err != nil {
 		return err
 	}
-	if err := installer.SetupNode(&p); err != nil {
+	if err := installer.SetupNode(ctx, &p); err != nil {
 		log.Infof("Failed to upgrade node %s: %v", node.Name, err)
 		return err
 	}
@@ -575,7 +574,7 @@ func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Contex
 		return err
 	}
 	log.Info("Finished with uncordon...")
-	if err = a.setNodeAnnotation(ctx, node, recipe.PlanKey, planJSON); err != nil {
+	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
 		return err
 	}
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
@@ -604,7 +603,7 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 	}); err != nil {
 		return err
 	}
-	if err := installer.SetupNode(nodePlan); err != nil {
+	if err := installer.SetupNode(ctx, nodePlan); err != nil {
 		return gerrors.Wrapf(err, "failed to set up machine %s", machine.Name)
 	}
 	if err := a.uncordon(ctx, node); err != nil {
@@ -646,7 +645,7 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 			return nil, err
 		}
 	}
-	plan, err := installer.CreateNodeSetupPlan(os.NodeParams{
+	plan, err := installer.CreateNodeSetupPlan(ctx, os.NodeParams{
 		IsMaster:                 machine.Labels["set"] == "master",
 		MasterIP:                 masterIP,
 		MasterPort:               6443, // TODO: read this dynamically, from somewhere.
@@ -793,7 +792,7 @@ func (a *ExistingInfraMachineReconciler) getOriginalMasterNode(ctx context.Conte
 	// So we just pick nodes[0] of the list, then label it.
 	originalMasterNode := nodes[0]
 	if _, exist := originalMasterNode.Labels[originalMasterLabel]; !exist {
-		if err := a.setNodeLabel(ctx, originalMasterNode, originalMasterLabel, ""); err != nil {
+		if err := a.setNodeLabel(ctx, originalMasterNode.Name, originalMasterLabel, ""); err != nil {
 			return nil, err
 		}
 	}
@@ -841,19 +840,27 @@ func (a *ExistingInfraMachineReconciler) uncordon(ctx context.Context, node *cor
 	return nil
 }
 
-func (a *ExistingInfraMachineReconciler) setNodeAnnotation(ctx context.Context, node *corev1.Node, key, value string) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
+func (a *ExistingInfraMachineReconciler) setNodeAnnotation(ctx context.Context, nodeName string, key, value string) error {
+	err := a.modifyNode(ctx, nodeName, func(node *corev1.Node) {
 		node.Annotations[key] = value
 	})
 	if err != nil {
-		return gerrors.Wrapf(err, "Failed to set node annotation: %s for node: %s", key, node.Name)
+		return gerrors.Wrapf(err, "Failed to set node annotation: %s for node: %s", key, nodeName)
 	}
 	return nil
 }
 
+func generateProviderID(nodeName string) string {
+	return "existingInfra://" + nodeName
+}
+
+// Note: does not modify the Node passed in
 func (a *ExistingInfraMachineReconciler) setNodeProviderIDIfNecessary(ctx context.Context, node *corev1.Node) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
-		node.Spec.ProviderID = "wks://" + node.Name
+	if node.Spec.ProviderID != "" {
+		return nil
+	}
+	err := a.modifyNode(ctx, node.Name, func(node *corev1.Node) {
+		node.Spec.ProviderID = generateProviderID(node.Name)
 	})
 	if err != nil {
 		return gerrors.Wrapf(err, "Failed to set providerID on node: %s", node.Name)
@@ -861,21 +868,21 @@ func (a *ExistingInfraMachineReconciler) setNodeProviderIDIfNecessary(ctx contex
 	return nil
 }
 
-func (a *ExistingInfraMachineReconciler) setNodeLabel(ctx context.Context, node *corev1.Node, label, value string) error {
-	err := a.modifyNode(ctx, node, func(node *corev1.Node) {
+func (a *ExistingInfraMachineReconciler) setNodeLabel(ctx context.Context, nodeName string, label, value string) error {
+	err := a.modifyNode(ctx, nodeName, func(node *corev1.Node) {
 		node.Labels[label] = value
 	})
 	if err != nil {
-		return gerrors.Wrapf(err, "Failed to set node label: %s for node: %s", label, node.Name)
+		return gerrors.Wrapf(err, "Failed to set node label: %s for node: %s", label, nodeName)
 	}
 	return nil
 }
 
-func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, node *corev1.Node, updater func(node *corev1.Node)) error {
-	contextLog := log.WithFields(log.Fields{"node": node.Name})
+func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeName string, updater func(node *corev1.Node)) error {
+	contextLog := log.WithFields(log.Fields{"node": nodeName})
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var result corev1.Node
-		getErr := a.Client.Get(ctx, client.ObjectKey{Name: node.Name}, &result)
+		getErr := a.Client.Get(ctx, client.ObjectKey{Name: nodeName}, &result)
 		if getErr != nil {
 			contextLog.Errorf("failed to read node info, assuming unsafe to update: %v", getErr)
 			return getErr
@@ -883,14 +890,14 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, node *c
 		updater(&result)
 		updateErr := a.Client.Update(ctx, &result)
 		if updateErr != nil {
-			contextLog.Errorf("failed attempt to update node annotation: %v", updateErr)
+			contextLog.Errorf("failed attempt to update node: %v", updateErr)
 			return updateErr
 		}
 		return nil
 	})
 	if retryErr != nil {
-		contextLog.Errorf("failed to update node annotation: %v", retryErr)
-		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", node.Name)
+		contextLog.Errorf("failed to update node: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "could not update node %s", nodeName)
 	}
 	return nil
 }
@@ -1087,8 +1094,8 @@ func (a *ExistingInfraMachineReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 	return nil
 }
 
-func (r *ExistingInfraMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return r.SetupWithManagerOptions(mgr, controller.Options{})
+func (a *ExistingInfraMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return a.SetupWithManagerOptions(mgr, controller.Options{})
 }
 
 // MachineControllerParams groups required inputs to create a machine actuator.

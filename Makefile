@@ -1,5 +1,7 @@
 VERSION=$(shell git describe --always --match "v*")
-IMAGE_TAG := $(shell tools/image-tag)
+IMAGE_TAG := $(shell hack/image-tag)
+# Image URL to use all building/pushing image targets
+IMG ?= weaveworks/cluster-api-existinginfra-controller:$(IMAGE_TAG)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd"
 
@@ -48,11 +50,11 @@ uninstall: manifests
 # Clean up images and binaries
 clean:
 	rm -f bin/manager
-	docker rmi -f weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+	-docker rmi -f ${IMG}
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+	cd config/manager && kustomize edit set image controller=${IMG}
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
@@ -77,12 +79,12 @@ generate: controller-gen conversion-gen image-tag-gen
 		-h hack/boilerplate.go.txt
 
 # Build the docker image
-docker-build: unit-tests
-	docker build . -t weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+docker-build:
+	docker build . -t ${IMG}
 
 # Push the docker image
 push: docker-build
-	docker push weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+	docker push ${IMG}
 
 # Generate code containing an image manifest that tracks the current IMAGE_TAG so
 # this code can be used upstream by builds that don't have access to the IMAGE_TAG
@@ -99,7 +101,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
