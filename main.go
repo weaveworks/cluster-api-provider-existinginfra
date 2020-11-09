@@ -37,9 +37,6 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-// TODO: Ported from wksctl, should be removed
-const defaultNamespace = `weavek8sops`
-
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")

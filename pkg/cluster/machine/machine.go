@@ -110,6 +110,9 @@ func WriteManifest(machines []*clusterv1.Machine, eiMachines []*existinginfrav1.
 		machineObjs = append(machineObjs, e)
 	}
 	data, err := manifest.Marshal(machineObjs...)
+	if err != nil {
+		return errors.Wrap(err, "failed unmarshalling machines file")
+	}
 	err = ioutil.WriteFile(path, data, 0644)
 	if err != nil {
 		return errors.Wrap(err, "failed writing the machines file")

@@ -150,7 +150,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 		return err
 	}
 	totalMachineCount := controlPlaneCount + workerCount
-	machineInfo, err := r.allocate(ctx, int(totalMachineCount), eic.Namespace)
+	machineInfo, err := r.allocate(ctx, totalMachineCount, eic.Namespace)
 	if err != nil {
 		return err
 	}
@@ -159,6 +159,8 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 		if val := recover(); val != nil {
 			log.Infof("Panic value: %v", val)
 			finalError = errors.New("Panic occurred!")
+			// FIXME, need error check here?
+			//nolint:errcheck
 			r.deallocate(ctx, machineInfo, eic.Namespace)
 		}
 	}()
@@ -172,7 +174,7 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	}); err != nil {
 		return err
 	}
-	machines, eims, err := r.createMachines(machineInfo, int(controlPlaneCount), eic.Spec.KubernetesVersion, eic.Namespace, eic.Name)
+	machines, eims, err := r.createMachines(machineInfo, controlPlaneCount, eic.Spec.KubernetesVersion, eic.Namespace, eic.Name)
 	if err != nil {
 		return err
 	}
@@ -181,6 +183,8 @@ func (r *ExistingInfraClusterReconciler) setupInitialWorkloadCluster(ctx context
 	initError := r.initiateCluster(ctx, cluster, eic, machines, eims, machineInfo)
 	if initError != nil && finalError == nil { // no panic
 		log.Errorf("Failed to initiate cluster: %v", initError)
+		// FIXME, need error check here?
+		//nolint:errcheck
 		r.deallocate(ctx, machineInfo, eic.Namespace)
 	}
 	return finalError
@@ -342,9 +346,12 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		return gerrors.Wrapf(err, "failed to set up seed node (%s)", sp.GetMasterPublicAddress())
 	}
 
-	r.modifyEIC(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
+	err = r.modifyEIC(ctx, eic, func(c *clusterweaveworksv1alpha3.ExistingInfraCluster) {
 		eic.Status.Ready = true
 	})
+	if err != nil {
+		return gerrors.Wrap(err, "Failed to set node status to Ready")
+	}
 
 	log.Infof("Finished setting up seed node: %s", sp.GetMasterPublicAddress())
 	return nil
@@ -369,7 +376,7 @@ func (r *ExistingInfraClusterReconciler) allocate(ctx context.Context, numMachin
 		return nil, err
 	}
 	log.Info("Got secret")
-	jsonData := []byte(secret.Data["config"])
+	jsonData := secret.Data["config"]
 	var info []capeios.MachineInfo
 	if err := json.Unmarshal(jsonData, &info); err != nil {
 		return nil, err
@@ -418,16 +425,14 @@ func (r *ExistingInfraClusterReconciler) deallocate(ctx context.Context, machine
 		return err
 	}
 	log.Info("Got secret for deallocation")
-	jsonData := []byte(secret.Data["config"])
+	jsonData := secret.Data["config"]
 	var info []capeios.MachineInfo
 	if err := json.Unmarshal(jsonData, &info); err != nil {
 		return err
 	}
 	log.Info("Unmarshaled secret")
 
-	for _, m := range machines {
-		info = append(info, m)
-	}
+	info = append(info, machines...)
 	infoBytes, err := json.Marshal(info)
 	if err != nil {
 		return err

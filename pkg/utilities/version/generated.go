@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "turn-controller-into-provider-91c37fb7"
+const ImageTag = "release-0.0.4-eb8c9bf3-WIP"

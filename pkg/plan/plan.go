@@ -691,7 +691,7 @@ func formatNestedErrors(errors map[string]error) string {
 	for id, err := range errors {
 		sb.WriteString(id)
 		sb.WriteString(" ")
-		sb.WriteString(strings.Replace(err.Error(), "\n", "\n  ", -1))
+		sb.WriteString(strings.ReplaceAll(err.Error(), "\n", "\n  "))
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -792,7 +792,7 @@ func (p *Plan) createChannels(
 	// Each resource has one input channel and a set of output
 	// channels.
 	//
-	//When a resource feeding in to a resource is connected,
+	// When a resource feeding in to a resource is connected,
 	// the input count of the downstream resource is incremented so it
 	// can determine when all dependees have finished
 	getConnectors := func(id string) *connectors {

@@ -1,3 +1,4 @@
+//nolint:deadcode,unused // _test files are ignored in .golangci.yaml
 package test
 
 // A set of utilities to help with constructing integration tests for cluster-api-existinginfra.
@@ -97,6 +98,7 @@ func (c *context) getOS() string {
 	osbytes, _, err := c.runCollectingOutput("uname", "-s")
 	require.NoError(c.t, err)
 	os := string(osbytes)
+	//nolint:gocritic // This is fine.
 	if strings.HasPrefix(os, "Linux") {
 		return "linux"
 	} else if strings.HasPrefix(os, "Darwin") {
@@ -239,17 +241,4 @@ func (c *context) ensureRunning(itemType, kubeconfigPath string) {
 		time.Sleep(30 * time.Second)
 	}
 	require.FailNow(c.t, fmt.Sprintf("Not all %s are running...", itemType))
-}
-
-// Determine if the temporary directory exists
-func tempDirExists(c *context) bool {
-	_, err := os.Stat(c.tmpDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-		log.Errorf("Got error attempting to stat temp directory")
-		return false
-	}
-	return true
 }

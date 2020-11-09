@@ -71,10 +71,6 @@ type OS struct {
 	PkgType resource.PkgType
 }
 
-var (
-	pemKeys = []string{"certificate-authority", "client-certificate", "client-key"}
-)
-
 type CRDFile struct {
 	Fname string
 	Data  []byte
@@ -293,7 +289,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	log.Info("Got init resource")
 
 	// TODO(damien): Add a CNI section in cluster.yaml once we support more than one CNI plugin.
-	const cni = "weave-net"
+	// const cni = "weave-net"
 
 	var manifest string
 	fetchRsc := &resource.Run{Script: object.String("kubectl version | base64 | tr -d '\n'"), Output: &manifest}
@@ -467,6 +463,9 @@ func WksControllerManifest(imageOverride, namespace string) ([]byte, error) {
 		return nil, err
 	}
 	content, err = UpdateControllerImage(content, version.ImageTag)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to update controller image with build version")
+	}
 	return UpdateControllerImage(content, imageOverride)
 }
 
@@ -587,8 +586,7 @@ func InjectEnvVarToContainer(
 		return errors.New(fmt.Sprintf("did not find container %s in manifest", name))
 	}
 
-	envVars := targetContainer.Env
-	for _, envVar := range envVars {
+	for _, envVar := range targetContainer.Env {
 		if envVar.Name == newEnvVar.Name {
 			if envVar.Value != newEnvVar.Value {
 				return errors.New(
@@ -597,7 +595,7 @@ func InjectEnvVarToContainer(
 			return nil
 		}
 	}
-	targetContainer.Env = append(envVars, newEnvVar)
+	targetContainer.Env = append(targetContainer.Env, newEnvVar)
 	containers[idx] = targetContainer
 
 	return nil
@@ -1064,25 +1062,6 @@ func createConfigFileResourcesFromClusterSpec(providerSpec *existinginfrav1.Clus
 	}
 	log.Info("Got config resources")
 	return configMapManifests, configMaps, resources, nil
-}
-
-func getConfigMapManifests(fileSpecs []existinginfrav1.FileSpec) (map[string][]byte, error) {
-	configMapManifests := map[string][]byte{}
-	for _, fileSpec := range fileSpecs {
-		mapName := fileSpec.Source.ConfigMap
-		if _, ok := configMapManifests[mapName]; !ok {
-			configMapManifests[mapName] = []byte(fileSpec.Source.Contents)
-		}
-	}
-	return configMapManifests, nil
-}
-
-func getConfigMap(manifest []byte) (*v1.ConfigMap, error) {
-	configMap := &v1.ConfigMap{}
-	if err := yaml.Unmarshal(manifest, configMap); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse config:\n%s", manifest)
-	}
-	return configMap, nil
 }
 
 const capiControllerManifestString = `apiVersion: apps/v1

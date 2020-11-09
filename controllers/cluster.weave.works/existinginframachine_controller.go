@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"time"
 
@@ -68,7 +67,6 @@ const (
 	controllerName      string = "wks-controller"
 	controllerSecret    string = "wks-controller-secrets"
 	bootstrapTokenID    string = "bootstrapTokenID"
-	ipConfigKey         string = "ips"
 )
 
 // ExistingInfraMachineReconciler is responsible for managing this cluster's machines, and
@@ -81,10 +79,6 @@ type ExistingInfraMachineReconciler struct {
 	controllerNamespace string
 	eventRecorder       record.EventRecorder
 	verbose             bool
-}
-
-type machineConnectionInfo struct {
-	publicIP, privateIP, keyPath string
 }
 
 // +kubebuilder:rbac:groups=cluster.weave.works,resources=existinginframachines,verbs=get;list;watch;create;update;patch;delete
@@ -265,15 +259,6 @@ func (a *ExistingInfraMachineReconciler) getMachineInfoOrUseDefault(ctx context.
 		return (*mi)[0], nil
 	}
 	return os.MachineInfo{}, fmt.Errorf("No machine information found for: %s", privateAddress)
-}
-
-func (a *ExistingInfraMachineReconciler) sshKey(ctx context.Context) ([]byte, error) {
-	var secret corev1.Secret
-	err := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: controllerSecret}, &secret)
-	if err != nil {
-		return nil, gerrors.Wrap(err, "failed to get WKS' secret")
-	}
-	return secret.Data["sshKey"], nil
 }
 
 // kubeadmJoinSecrets groups the values available in the wks-controller-secrets
@@ -1040,21 +1025,6 @@ func getInternalAddress(node *corev1.Node) (string, error) {
 		}
 	}
 	return "", errors.New("no InternalIP address found")
-}
-
-func allocateIPs(numIPs int) ([]machineConnectionInfo, error) {
-	ipJson, err := ioutil.ReadFile(ipConfigKey)
-	if err != nil {
-		return nil, err
-	}
-	var ips []machineConnectionInfo
-	if err := json.Unmarshal(ipJson, &ips); err != nil {
-		return nil, err
-	}
-	if len(ips) < numIPs {
-		return nil, fmt.Errorf("Insufficient IPs to create cluster, need: %d, have: %d", numIPs, len(ips))
-	}
-	return ips[0:numIPs], nil
 }
 
 func (a *ExistingInfraMachineReconciler) recordEvent(object runtime.Object, eventType, reason, messageFmt string, args ...interface{}) {

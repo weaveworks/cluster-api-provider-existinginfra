@@ -19,5 +19,5 @@ func (s *Runner) RunCommand(ctx context.Context, cmd string, stdin io.Reader) (s
 }
 
 func escape(cmd string) string {
-	return "'" + strings.Replace(cmd, "'", "'\"'\"'", -1) + "'"
+	return "'" + strings.ReplaceAll(cmd, "'", "'\"'\"'") + "'"
 }

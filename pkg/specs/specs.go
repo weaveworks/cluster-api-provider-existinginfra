@@ -140,28 +140,19 @@ func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existingin
 		return nil, nil, errors.New("parsed cluster manifest lacks ExistingInfraCluster definition")
 	}
 
-	return
+	return nil, nil, nil
 }
 
 // WriteManifest takes a cluster and ExistingInfra cluster and creates the
 // manifest file
 func WriteManifest(cluster *clusterv1.Cluster, eic *existinginfrav1.ExistingInfraCluster, path string) error {
 	data, err := manifest.Marshal(cluster, eic)
+	if err != nil {
+		return errors.Wrap(err, "failed marshaling the cluster file")
+	}
 	err = ioutil.WriteFile(path, data, 0644)
 	if err != nil {
 		return errors.Wrap(err, "failed writing the cluster file")
 	}
 	return nil
-}
-
-// populateCluster mutates the cluster manifest:
-//   - fill in default values
-//   - expand ~ and resolve relative path in SSH key path
-func populateCluster(cluster *clusterv1.Cluster) {
-	populateNetwork(cluster)
-}
-func populateNetwork(cluster *clusterv1.Cluster) {
-	if cluster.Spec.ClusterNetwork.ServiceDomain == "" {
-		cluster.Spec.ClusterNetwork.ServiceDomain = "cluster.local"
-	}
 }
