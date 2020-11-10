@@ -277,6 +277,10 @@ func (c *testContext) ensureRunning(itemType, kubeconfigPath string) {
 			return
 		}
 		log.Infof("Waiting for all %s to be running, retry: %d...", itemType, retryCount)
+		if retryCount > 6 {
+			c.runWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath), Stdout: os.Stdout, Stderr: os.Stderr},
+				"kubectl", "get", "nodes", "-A", "-o", "yaml")
+		}
 		time.Sleep(30 * time.Second)
 	}
 	require.FailNow(c.t, fmt.Sprintf("Not all %s are running...", itemType))
