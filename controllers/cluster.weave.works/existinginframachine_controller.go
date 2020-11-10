@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -43,9 +42,7 @@ import (
 	bootstraputils "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -61,15 +58,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sigs.k8s.io/yaml"
 )
 
 const (
 	masterLabel         string = "node-role.kubernetes.io/master"
 	originalMasterLabel string = "wks.weave.works/original-master"
 	controllerName      string = "wks-controller"
+	controllerNamespace string = "weavek8sops"
 	controllerSecret    string = "wks-controller-secrets"
 	bootstrapTokenID    string = "bootstrapTokenID"
 )
@@ -138,7 +134,7 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		Namespace: eim.Namespace,
 		Name:      cluster.Spec.InfrastructureRef.Name,
 	}, eic); err != nil {
-		contextLog.Infof("ExistingInfraCluster is not available yet - %v", err)
+		contextLog.Info("ExistingInfraCluster is not available yet")
 		return ctrl.Result{}, nil
 	}
 
@@ -196,61 +192,11 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
 		return err
 	}
-
-	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
-		return err
-	}
-
 	// CAPI machine controller requires providerID
 	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
 	a.recordEvent(machine, corev1.EventTypeNormal, "Create", "created machine %s", machine.Name)
 	return nil
-}
-
-func (a *ExistingInfraMachineReconciler) getClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster) (*v1.ConfigMap, error) {
-	var configMap v1.ConfigMap
-	if err := a.Client.Get(ctx, client.ObjectKey{Namespace: a.controllerNamespace, Name: eic.Name}, &configMap); err != nil {
-		if kerrors.IsNotFound(err) {
-			return nil, errors.New("No cluster config map found")
-		}
-		log.Infof("Failed to retrieve config map")
-		return nil, err
-	}
-	return &configMap, nil
-}
-
-func (a *ExistingInfraMachineReconciler) addMachineToClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster, newip string) error {
-	configMap, err := a.getClusterConfigMap(ctx, eic)
-	if err != nil {
-		return err
-	}
-	var ips []string
-	if err := yaml.Unmarshal([]byte(configMap.Data["machines"]), &ips); err != nil {
-		return err
-	}
-	if isMachineInList(newip, ips) {
-		return nil
-	}
-	ips = append(ips, newip)
-	ipbytes, err := yaml.Marshal(ips)
-	if err != nil {
-		return err
-	}
-	log.Info("Updating machine config map")
-	return a.updateConfigMap(ctx, a.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
-		configMap.Data["machines"] = string(ipbytes)
-		return nil
-	})
-}
-
-func isMachineInList(newip string, ips []string) bool {
-	for _, ip := range ips {
-		if ip == newip {
-			return true
-		}
-	}
-	return false
 }
 
 func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, m *existinginfrav1.ExistingInfraMachine) (*os.OS, io.Closer, error) {
@@ -362,13 +308,14 @@ func (a *ExistingInfraMachineReconciler) token(ctx context.Context, id string) (
 	err := a.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, secret)
 	if err != nil {
 		// The secret may have been removed if it expired so we will generate a new one
-		log.Debugf("failed to find original bootstrap token %s/%s, generating a new one", ns, name)
+		log.Infof("failed to find original bootstrap token %s/%s, generating a new one", ns, name)
 		newSecret, err := a.installNewBootstrapToken(ctx, ns)
 		if err != nil {
 			return "", gerrors.Wrapf(err, "failed to find old secret %s/%s or generate a new one", ns, name)
 		}
 		secret = newSecret
 	} else if bootstrapTokenHasExpired(secret) {
+		log.Infof("token has expired, generating a new one", ns, name)
 		newSecret, err := a.installNewBootstrapToken(ctx, ns)
 		if err != nil {
 			return "", gerrors.Wrapf(err, "failed to replace expired secret %s/%s with a new one", ns, name)
@@ -414,6 +361,7 @@ func (a *ExistingInfraMachineReconciler) installNewBootstrapToken(ctx context.Co
 	if !ok {
 		return nil, gerrors.Errorf("token-id not found %s/%s", secret.ObjectMeta.Namespace, secret.ObjectMeta.Name)
 	}
+	log.Infof("Updating kubeadm join secret %s", secret.Name)
 	if err := a.updateKubeadmJoinSecrets(ctx, string(tokenID), secret); err != nil {
 		return nil, gerrors.Errorf("Failed to update wks join token %s/%s", secret.ObjectMeta.Namespace, secret.ObjectMeta.Name)
 	}
@@ -455,6 +403,7 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 // Update the machine to the provided definition.
 func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) error {
 	contextLog := log.WithFields(log.Fields{"machine": machine.Name, "cluster": c.Name})
+
 	contextLog.Info("updating machine...")
 	installer, closer, err := a.connectTo(ctx, c, eim)
 	if err != nil {
@@ -482,6 +431,54 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return err
+	}
+	isMaster := isMaster(node)
+	if isMaster {
+		// Check if kubeadm-certs exists.
+		// If not, ssh in an existing cp node and run
+		// kubeadm init phase upload-certs --upload-certs
+		// and copy out the certificate key (and the discovery token ca cert hash?)
+		// and update wks-controller-secrets
+
+		exists, _ := a.kubeadmCertsExists(ctx)
+		if !exists {
+			log.Infof("kubeadm-certs secret not found, regenerating...")
+			var certificateKey string
+			renewCertsPlan, err := recipe.BuildKubeadmCertsRenewalPlan(ctx, &certificateKey)
+			if err != nil {
+				return err
+			}
+			_, err = renewCertsPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
+			if err != nil {
+				log.Errorf("Apply of Plan failed:\n%s\n", err)
+			}
+			log.Infof(fmt.Sprintf("updating certificate key in %s with cert key: %s", controllerSecret, certificateKey))
+
+			len := base64.StdEncoding.EncodedLen(len(certificateKey))
+			certificateKeyB64 := make([]byte, len)
+			base64.StdEncoding.Encode(certificateKeyB64, []byte(certificateKey))
+			patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\"}}", "certificateKey", certificateKeyB64))
+
+			secret := corev1.Secret{}
+			secretName := types.NamespacedName{
+				Name:      controllerSecret,
+				Namespace: controllerNamespace,
+			}
+
+			err = a.Client.Get(ctx, secretName, &secret)
+			if err != nil {
+				log.Infof("failed to get %s in namespace %s %s %v", controllerSecret, controllerNamespace, patch, err)
+			}
+			err = a.Client.Patch(ctx, &secret, client.RawPatch(types.StrategicMergePatchType, patch))
+			if err != nil {
+				log.Infof("failed to patch %s secret %s %v", controllerSecret, patch, err)
+			}
+			return err
+		}
+
+		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
+			return err
+		}
 	}
 	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
 	if err != nil {
@@ -513,12 +510,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	}
 
 	contextLog.Infof("........................NEW UPDATE FOR: %s...........................", machine.Name)
-	isMaster := isMaster(node)
-	if isMaster {
-		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
-			return err
-		}
-	}
+
 	upOrDowngrade := isUpOrDowngrade(machine, node)
 	contextLog.Infof("Is master: %t, is up or downgrade: %t", isMaster, upOrDowngrade)
 	if upOrDowngrade {
@@ -562,12 +554,12 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 					return err
 				}
 			case isOriginal:
-				return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.OriginalMaster)
+				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.OriginalMaster)
 			default:
-				return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.SecondaryMaster)
+				return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.SecondaryMaster)
 			}
 		}
-		return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.Worker)
+		return a.kubeadmUpOrDowngrade(ctx, machine, node, installer, version, planJSON, recipe.Worker)
 	}
 
 	if err = a.performActualUpdate(ctx, installer, machine, node, nodePlan, c); err != nil {
@@ -575,10 +567,6 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	}
 
 	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
-		return err
-	}
-
-	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
 		return err
 	}
 	// CAPI machine controller requires providerID
@@ -591,7 +579,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 
 // kubeadmUpOrDowngrade does upgrade or downgrade a machine.
 // Parameter k8sversion specified here represents the version of both Kubernetes and Kubeadm.
-func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine, node *corev1.Node, installer *os.OS,
+func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Context, machine *clusterv1.Machine, node *corev1.Node, installer *os.OS,
 	k8sVersion, planJSON string, ntype recipe.NodeType) error {
 	b := plan.NewBuilder()
 
@@ -618,9 +606,6 @@ func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Contex
 	}
 	log.Info("Finished with uncordon...")
 	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
-		return err
-	}
-	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
 		return err
 	}
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
@@ -659,6 +644,7 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 }
 
 func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provider *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, machineAddress string, installer *os.OS) (*plan.Plan, error) {
+	log.Infof("Getting node plan for %s", machine.Name)
 	namespace := a.controllerNamespace
 	secrets, err := a.kubeadmJoinSecrets(ctx)
 	if err != nil {
@@ -942,8 +928,8 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeNam
 		return nil
 	})
 	if retryErr != nil {
-		contextLog.Errorf("failed to update node annotation: %v", retryErr)
-		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", nodeName)
+		contextLog.Errorf("failed to update node: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "could not update node %s", nodeName)
 	}
 	return nil
 }
@@ -1007,20 +993,6 @@ func (a *ExistingInfraMachineReconciler) findNodeByPrivateAddress(ctx context.Co
 		}
 	}
 	return nil, apierrs.NewNotFound(schema.GroupResource{Group: "", Resource: "nodes"}, "")
-}
-
-func (a *ExistingInfraMachineReconciler) findMachineByPrivateAddress(ctx context.Context, addr string) (*existinginfrav1.ExistingInfraMachine, error) {
-	var machines existinginfrav1.ExistingInfraMachineList
-	err := a.Client.List(ctx, &machines)
-	if err != nil {
-		return nil, gerrors.Wrap(err, "failed to list machines")
-	}
-	for _, machine := range machines.Items {
-		if machine.Spec.Private.Address == addr {
-			return &machine, nil
-		}
-	}
-	return nil, fmt.Errorf("Could not locate machine with private address: %s", addr)
 }
 
 // getNodePrivateAddress looks through the addresses for a node and extracts the private address
@@ -1128,14 +1100,6 @@ func (a *ExistingInfraMachineReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 				ToRequests: util.MachineToInfrastructureMapFunc(existinginfrav1.GroupVersion.WithKind("ExistingInfraMachine")),
 			},
 		).
-		Watches(
-			// Process changes to a cluster spec that affect the machines; look up machines in config map
-			// and queue them for reconcile when the cluster spec changes
-			&source.Kind{Type: &existinginfrav1.ExistingInfraCluster{}},
-			&handler.EnqueueRequestsFromMapFunc{
-				ToRequests: MachineMapper{reconciler: a},
-			},
-		).
 		// TODO: add watch to reconcile all machines that need it
 		WithEventFilter(pausedPredicates()).
 		Build(a)
@@ -1149,151 +1113,6 @@ func (a *ExistingInfraMachineReconciler) SetupWithManagerOptions(mgr ctrl.Manage
 
 func (a *ExistingInfraMachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return a.SetupWithManagerOptions(mgr, controller.Options{})
-}
-
-type MachineMapper struct {
-	reconciler *ExistingInfraMachineReconciler
-}
-
-// Map processes changes to a cluster spec that affect the machines; look up machines in config map
-// and queue them for reconcile when the cluster spec changes
-func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
-	ns := mo.Meta.GetNamespace()
-	name := mo.Meta.GetName()
-	eic := &existinginfrav1.ExistingInfraCluster{}
-	err := m.reconciler.Client.Get(context.TODO(), client.ObjectKey{Namespace: ns, Name: name}, eic)
-	if err != nil {
-		return nil
-	}
-	cmap, err := m.reconciler.getClusterConfigMap(context.TODO(), eic)
-	if err != nil {
-		return nil
-	}
-
-	// Check if the cluster spec has changed
-	specBytes, err := json.Marshal(eic.Spec)
-	if err != nil {
-		return nil
-	}
-	specByteHash := fmt.Sprintf("%v", sha256.Sum256(specBytes))
-	existingSpecHash := []byte(cmap.Data["spec"])
-	if len(specByteHash) == len(existingSpecHash) {
-		differ := false
-		for idx := range specByteHash {
-			if specByteHash[idx] != existingSpecHash[idx] {
-				differ = true
-				break
-			}
-		}
-		if !differ {
-			return nil
-		}
-	}
-	log.Info("Cluster configuration changed; marking machines as needing repaving")
-	if err := m.reconciler.updateAPIServerArgs(context.TODO(), &eic.Spec.APIServer.ExtraArguments); err != nil {
-		log.Errorf("failed to update API server args: %v", err)
-		return nil
-	}
-
-	// Find the machines needing update
-	result := []reconcile.Request{}
-	machineBytes := []byte(cmap.Data["machines"])
-	var ips []string
-	if err := yaml.Unmarshal(machineBytes, &ips); err != nil {
-		return nil
-	}
-	for _, ip := range ips {
-		m, err := m.reconciler.findMachineByPrivateAddress(context.TODO(), ip)
-		if err != nil {
-			continue
-		}
-		result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: m.Namespace, Name: m.Name}})
-	}
-
-	// Update the config map with the new spec and clear the list of machines (they will get added back after repaving)
-	if err := m.reconciler.updateConfigMap(context.TODO(), m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
-		configMap.Data["spec"] = string(specBytes)
-		configMap.Data["machines"] = "[]"
-		return nil
-	}); err != nil {
-		log.Errorf("Failed to update cluster config map: %v", err)
-		return nil
-	}
-
-	return result
-}
-
-// updateAPIServerArgs updates the kubeadm-config config map with new apiserver arguments so that control plane nodes will pick them
-// up when repaved.
-func (a *ExistingInfraMachineReconciler) updateAPIServerArgs(ctx context.Context, apiServerArgs *[]existinginfrav1.ServerArgument) error {
-	log.Infof("In updateAPIServerArgs: %v", *apiServerArgs)
-	var configMap v1.ConfigMap
-	if err := a.Client.Get(ctx, types.NamespacedName{Namespace: "kube-system", Name: "kubeadm-config"}, &configMap); err != nil {
-		if kerrors.IsNotFound(err) {
-			log.Info("No config map found")
-			return nil
-		}
-		log.Info("Failed to retrieve config map")
-		return err
-	}
-	log.Infof("After getting config map: %v", configMap)
-	config := configMap.Data["ClusterConfiguration"]
-	var confobj map[string]interface{}
-	if err := yaml.Unmarshal([]byte(config), &confobj); err != nil {
-		return err
-	}
-	log.Infof("After unmarshaling configuration: %v", confobj)
-	apiServerData := confobj["apiServer"]
-	if apiServerData == nil {
-		apiServer := map[string]interface{}{}
-		confobj["apiServer"] = apiServer
-	}
-	apiServer := apiServerData.(map[string]interface{})
-	extraArgs := apiServer["extraArgs"]
-	if extraArgs == nil {
-		extraArgs = map[string]interface{}{}
-		apiServer["extraArgs"] = extraArgs
-	}
-	emap := extraArgs.(map[string]interface{})
-	for _, serverArg := range *apiServerArgs {
-		emap[serverArg.Name] = serverArg.Value
-	}
-	apiServer["extraArgs"] = extraArgs
-	bytes, err := yaml.Marshal(confobj)
-	if err != nil {
-		return err
-	}
-	return a.updateConfigMap(ctx, "kube-system", "kubeadm-config", func(configMap *v1.ConfigMap) error {
-		configMap.Data["ClusterConfiguration"] = string(bytes)
-		return nil
-	})
-}
-
-// updateConfigMap updates a config map with retries for conflicts
-func (a *ExistingInfraMachineReconciler) updateConfigMap(ctx context.Context, namespace, name string, updater func(*v1.ConfigMap) error) error {
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var result v1.ConfigMap
-		getErr := a.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &result)
-		if getErr != nil {
-			log.Errorf("failed to read config map, can't reschedule: %v", getErr)
-			return getErr
-		}
-		if err := updater(&result); err != nil {
-			log.Errorf("failed to update cluster: %v", err)
-			return err
-		}
-		updateErr := a.Client.Update(ctx, &result)
-		if updateErr != nil {
-			log.Errorf("failed to reschedule config map: %v", updateErr)
-			return updateErr
-		}
-		return nil
-	})
-	if retryErr != nil {
-		log.Errorf("failed to update config map: %v", retryErr)
-		return retryErr
-	}
-	return nil
 }
 
 // MachineControllerParams groups required inputs to create a machine actuator.
@@ -1317,4 +1136,15 @@ func NewMachineControllerWithLegacyParams(params *MachineControllerParams) *Exis
 		eventRecorder:       params.EventRecorder,
 		verbose:             params.Verbose,
 	}
+}
+
+func (a *ExistingInfraMachineReconciler) kubeadmCertsExists(ctx context.Context) (bool, error) {
+	namespace := "kube-system"
+	name := "kubeadm-certs"
+	kubeadmCertsSecret := &corev1.Secret{}
+	err := a.Client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, kubeadmCertsSecret)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
