@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "release-0.0.4-89bf19a0"
+const ImageTag = "fixes-spec-parsing-7f305704"
