@@ -110,7 +110,7 @@ func ParseClusterManifest(file string) (*clusterv1.Cluster, *existinginfrav1.Exi
 }
 
 // ParseCluster converts the manifest file into a Cluster
-func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existinginfrav1.ExistingInfraCluster, err error) {
+func ParseCluster(rc io.ReadCloser) (*clusterv1.Cluster, *existinginfrav1.ExistingInfraCluster, error) {
 	// Read from the ReadCloser YAML document-by-document
 	fr := serializer.NewYAMLFrameReader(rc)
 
@@ -120,6 +120,8 @@ func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existingin
 		return nil, nil, errors.Wrap(err, "failed to parse cluster manifest")
 	}
 
+	var cluster *clusterv1.Cluster
+	var eic *existinginfrav1.ExistingInfraCluster
 	// Loop through the untyped objects we got and add them to the specific lists
 	for _, obj := range objs {
 		switch typed := obj.(type) {
@@ -140,7 +142,7 @@ func ParseCluster(rc io.ReadCloser) (cluster *clusterv1.Cluster, eic *existingin
 		return nil, nil, errors.New("parsed cluster manifest lacks ExistingInfraCluster definition")
 	}
 
-	return nil, nil, nil
+	return cluster, eic, nil
 }
 
 // WriteManifest takes a cluster and ExistingInfra cluster and creates the
