@@ -789,10 +789,6 @@ spec:
                     type: object
                   type: array
               type: object
-            sshKeyPath:
-              type: string
-            user:
-              type: string
           required:
           - cri
           type: object
@@ -872,6 +868,7 @@ rules:
   resources:
   - configmaps
   verbs:
+  - create
   - get
   - watch
   - list
@@ -1133,10 +1130,10 @@ spec:
         operator: Exists
       containers:
       - name: controller
-        image: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6"}
+        image: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.7"}
         env:
         - name: EXISTINGINFRA_CONTROLLER_IMAGE
-          value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6"}
+          value: ${EXISTINGINFRA_CONTROLLER_IMAGE:-"docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.7"}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -1150,5 +1147,3 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
-
-

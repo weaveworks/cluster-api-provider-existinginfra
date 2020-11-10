@@ -7,29 +7,29 @@ linters:
   enable:
   # Default
   - govet
-  - errcheck
-  - staticcheck
-  - unused
-  - gosimple
-  - structcheck
-  - varcheck
-  - ineffassign
-  - deadcode
-  - typecheck
-  # Extra, see list of https://golangci-lint.run/usage/linters/
-  - bodyclose
-  - unconvert
-  - dupl
-  - goconst
-  - gocyclo
-  - asciicheck
-  - gofmt
-  - goimports
-  - misspell
-  - dogsled
-  - nakedret
-  - prealloc
-  - gocritic
-  - goprintffuncname
-  - exhaustive
-  - nolintlint
+  # - errcheck
+  # - staticcheck
+  # - unused
+  # - gosimple
+  # - structcheck
+  # - varcheck
+  # - ineffassign
+  # - deadcode
+  # - typecheck
+  # # Extra, see list of https://golangci-lint.run/usage/linters/
+  # - bodyclose
+  # - unconvert
+  # - dupl
+  # - goconst
+  # - gocyclo
+  # - asciicheck
+  # - gofmt
+  # - goimports
+  # - misspell
+  # - dogsled
+  # - nakedret
+  # - prealloc
+  # - gocritic
+  # - goprintffuncname
+  # - exhaustive
+  # - nolintlint

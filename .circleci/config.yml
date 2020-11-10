@@ -67,11 +67,21 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Install kubectl
+          command: |
+            curl -L $KUBECTL_URL -o kubectl.tar.gz
+            echo "$KUBECTL_CHECKSUM kubectl.tar.gz" | sha256sum -c
+            tar xvzf kubectl.tar.gz --strip-components=3
+            sudo mv kubectl /usr/local/bin
+
+      - run:
           name: Run unit tests
           command: |
             go version
             make test
   integration-tests:
+    requires:
+      - build
     machine:
       image: ubuntu-1604:202004-01
     environment:

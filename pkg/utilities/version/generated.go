@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "fixes-spec-parsing-7f305704"
+const ImageTag = "track-cluster-spec-modifications-and-repave-machines-when-they-change-862c0699"

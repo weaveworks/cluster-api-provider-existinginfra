@@ -27,6 +27,7 @@ metadata:
     cluster.x-k8s.io/provider: infrastructure-existinginfra
 spec:
   kubernetesVersion: "${KUBERNETES_VERSION}"
+  controlPlaneEndpoint: "${CONTROL_PLANE_ENDPOINT}"
   controlPlaneMachineCount: "${CONTROL_PLANE_MACHINE_COUNT}"
   workerMachineCount: "${WORKER_MACHINE_COUNT}"
   workloadCluster: true
@@ -43,7 +44,6 @@ spec:
           gpgcheck=1
           repo_gpgcheck=1
           gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-          exclude=kube*
       destination: /etc/yum.repos.d/kubernetes.repo
     - source:
         configmap: repo
