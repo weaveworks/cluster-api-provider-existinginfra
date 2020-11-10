@@ -662,6 +662,7 @@ func InjectEnvVarToContainer(
 			return nil
 		}
 	}
+	envVars := targetContainer.Env
 	envVars = append(envVars, newEnvVar) // to satisfy linter
 	targetContainer.Env = envVars
 	containers[idx] = targetContainer
