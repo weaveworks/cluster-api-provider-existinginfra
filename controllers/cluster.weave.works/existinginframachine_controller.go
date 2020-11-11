@@ -444,20 +444,30 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		if !exists {
 			log.Infof("kubeadm-certs secret not found, regenerating...")
 			var certificateKey string
-			renewCertsPlan, err := recipe.BuildKubeadmCertsRenewalPlan(ctx, &certificateKey)
+			getCertKeyPlan, err := recipe.BuildGetKubeadmCertKeyPlan(ctx, &certificateKey)
 			if err != nil {
+				log.Errorf("failed to build get kubeadm cert key plan, err: ", err)
 				return err
 			}
-			_, err = renewCertsPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
+			certificateKey = strings.TrimSuffix(certificateKey, "\n")
+			_, err = getCertKeyPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
 			if err != nil {
 				log.Errorf("Apply of Plan failed:\n%s\n", err)
+				return err
 			}
-			log.Infof(fmt.Sprintf("updating certificate key in %s with cert key: %s", controllerSecret, certificateKey))
-
-			len := base64.StdEncoding.EncodedLen(len(certificateKey))
-			certificateKeyB64 := make([]byte, len)
-			base64.StdEncoding.Encode(certificateKeyB64, []byte(certificateKey))
-			patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\"}}", "certificateKey", certificateKeyB64))
+			log.Infof(fmt.Sprintf("generated certificate key: %s", certificateKey))
+			log.Infof(fmt.Sprintf("uploading kubeadm certs with cert key: %s", certificateKey))
+			uploadCertsPlan, err := recipe.BuildUploadKubeadmCertsPlan(ctx, certificateKey)
+			if err != nil {
+				log.Errorf("failed to build upload kubeadm certs plan, err: ", err)
+				return err
+			}
+			certificateKey = strings.TrimSuffix(certificateKey, "\n")
+			_, err = uploadCertsPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
+			if err != nil {
+				log.Errorf("Apply of Plan failed:\n%s\n", err)
+				return err
+			}
 
 			secret := corev1.Secret{}
 			secretName := types.NamespacedName{
@@ -465,15 +475,38 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 				Namespace: controllerNamespace,
 			}
 
+			log.Infof("creating a new bootstrap token...")
+			bootstrapTokenSecret, err := a.installNewBootstrapToken(ctx, "kube-system")
+			if err != nil {
+				return gerrors.Errorf("failed to create new bootstrap token, err: %s", err)
+			}
+			tokenID, ok := bootstrapTokenSecret.Data[bootstrapapi.BootstrapTokenIDKey]
+			if !ok {
+				return gerrors.Errorf("token-id not found %s/%s", bootstrapTokenSecret.ObjectMeta.Namespace, bootstrapTokenSecret.ObjectMeta.Name)
+			}
+
+			lenKey := base64.StdEncoding.EncodedLen(len(certificateKey))
+			certificateKeyB64 := make([]byte, lenKey)
+			base64.StdEncoding.Encode(certificateKeyB64, []byte(certificateKey))
+
+			lenTokenID := base64.StdEncoding.EncodedLen(len(tokenID))
+			log.Infof("bootstrap token ID: %s", tokenID)
+			tokenIDB64 := make([]byte, lenTokenID)
+			base64.StdEncoding.Encode(tokenIDB64, []byte(tokenID))
+			patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\", \"%s\":\"%s\"}}",
+				"certificateKey", certificateKeyB64, "bootstrapTokenID", tokenIDB64))
+
 			err = a.Client.Get(ctx, secretName, &secret)
 			if err != nil {
 				log.Infof("failed to get %s in namespace %s %s %v", controllerSecret, controllerNamespace, patch, err)
+				return err
 			}
 			err = a.Client.Patch(ctx, &secret, client.RawPatch(types.StrategicMergePatchType, patch))
 			if err != nil {
 				log.Infof("failed to patch %s secret %s %v", controllerSecret, patch, err)
+				return err
 			}
-			return err
+
 		}
 
 		if err := a.prepareForMasterUpdate(ctx, node); err != nil {

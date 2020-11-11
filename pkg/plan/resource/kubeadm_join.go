@@ -58,6 +58,7 @@ func (kj *KubeadmJoin) Apply(ctx context.Context, runner plan.Runner, diff plan.
 		apiServerEndpoint = fmt.Sprintf("%s:%d", kj.ControlPlaneEndpoint, kj.MasterPort)
 	}
 	kubeadmJoinCmd := kj.kubeadmJoinCmd(apiServerEndpoint)
+	log.Infof("Running kubeadm join command: \n%s\n", kubeadmJoinCmd)
 	if stdouterr, err := runner.RunCommand(ctx, WithoutProxy(kubeadmJoinCmd), nil); err != nil {
 		log.WithField("stdouterr", stdouterr).Error("failed to join cluster")
 		return false, errors.Wrap(err, "failed to join cluster")
@@ -82,8 +83,10 @@ func (kj *KubeadmJoin) kubeadmJoinCmd(apiServerEndpoint string) string {
 
 		kubeJoinCmd.WriteString(kj.CertificateKey)
 	}
-	kubeJoinCmd.WriteString(" --node-name=")
-	kubeJoinCmd.WriteString(kj.NodeName)
+	if len(kj.NodeName) > 0 {
+		kubeJoinCmd.WriteString(" --node-name=")
+		kubeJoinCmd.WriteString(kj.NodeName)
+	}
 	kubeJoinCmd.WriteString(" --token ")
 	kubeJoinCmd.WriteString(kj.Token)
 	kubeJoinCmd.WriteString(" --discovery-token-ca-cert-hash ")

@@ -830,11 +830,26 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("kubeadm:prejoin", kadmPJRsrc, plan.DependOn("install:k8s"))
 
 	log.Info("Built join plan")
+	params.CertificateKey = strings.TrimSuffix(params.CertificateKey, "\n")
+	log.Info("Certificate key used: ", params.CertificateKey)
+	log.Info("Token used: ", params.Token)
+	log.Info("DiscoveryTokenCACertHash used: ", params.DiscoveryTokenCaCertHash)
+	log.Info("NodeName used: ", cfg.HostnameOverride)
+	nodeName := cfg.HostnameOverride
+	if nodeName == "" {
+		nodeName := ""
+		if params.IsMaster {
+			nodeName += "master-"
+		} else {
+			nodeName += "worker-"
+		}
+		nodeName += params.KubeletConfig.NodeIP
+	}
 
 	kadmJoinRsrc := &resource.KubeadmJoin{
 		IsMaster:                 params.IsMaster,
 		NodeIP:                   params.KubeletConfig.NodeIP,
-		NodeName:                 cfg.HostnameOverride,
+		NodeName:                 nodeName,
 		MasterIP:                 params.MasterIP,
 		MasterPort:               params.MasterPort,
 		Token:                    params.Token,
