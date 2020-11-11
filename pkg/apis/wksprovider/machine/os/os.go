@@ -74,6 +74,10 @@ type OS struct {
 	PkgType resource.PkgType
 }
 
+var (
+	pemKeys = []string{"certificate-authority", "client-certificate", "client-key"}
+)
+
 type CRDFile struct {
 	Fname string
 	Data  []byte
@@ -341,10 +345,6 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	log.Info("Got seed node plan")
 
 	b.AddResource("node:plan", &resource.KubectlAnnotateSingleNode{Key: recipe.PlanKey, Value: seedNodePlan.ToState().ToJSON()}, plan.DependOn("kubeadm:init"))
-
-	if params.AuthInfo != nil {
-		addAuthConfigMapIfNecessary(configMapManifests, params.AuthInfo.AuthConfigManifest)
-	}
 
 	if params.AuthInfo != nil {
 		addAuthConfigMapIfNecessary(configMapManifests, params.AuthInfo.AuthConfigManifest)
@@ -1168,20 +1168,6 @@ spec:
             memory: 20Mi
 `
 
-// const wksControllerRoleBinding = `apiVersion: rbac.authorization.k8s.io/v1
-// kind: ClusterRoleBinding
-// metadata:
-//   name: wks-controller-rolebinding
-// roleRef:
-//   apiGroup: rbac.authorization.k8s.io
-//   kind: ClusterRole
-//   name: wks-controller-role
-// subjects:
-// - kind: ServiceAccount
-//   name: default
-//   namespace: {{ .ControllerNamespace }}
-// `
-
 const wksControllerManifestString = `apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1226,10 +1212,10 @@ spec:
       containers:
       - name: controller
         imagePullPolicy: Always
-        image: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6
+        image: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.7
         env:
         - name: EXISTINGINFRA_CONTROLLER_IMAGE
-          value: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.6
+          value: docker.io/weaveworks/cluster-api-existinginfra-controller:v0.0.7
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -1245,7 +1231,6 @@ spec:
             memory: 20Mi
 `
 
-// weaveworks/cluster-api-existinginfra-controller:v0.0.6
 var sealedSecretCRDManifestString = []byte(`apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
