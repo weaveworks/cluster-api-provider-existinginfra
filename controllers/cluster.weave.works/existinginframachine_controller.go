@@ -39,6 +39,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/ssh"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/specs"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/encoding"
 	bootstraputils "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	corev1 "k8s.io/api/core/v1"
@@ -315,7 +316,7 @@ func (a *ExistingInfraMachineReconciler) token(ctx context.Context, id string) (
 		}
 		secret = newSecret
 	} else if bootstrapTokenHasExpired(secret) {
-		log.Infof("token has expired, generating a new one", ns, name)
+		log.Infof("token %s/%s has expired, generating a new one", ns, name)
 		newSecret, err := a.installNewBootstrapToken(ctx, ns)
 		if err != nil {
 			return "", gerrors.Wrapf(err, "failed to replace expired secret %s/%s with a new one", ns, name)
@@ -361,7 +362,6 @@ func (a *ExistingInfraMachineReconciler) installNewBootstrapToken(ctx context.Co
 	if !ok {
 		return nil, gerrors.Errorf("token-id not found %s/%s", secret.ObjectMeta.Namespace, secret.ObjectMeta.Name)
 	}
-	log.Infof("Updating kubeadm join secret %s", secret.Name)
 	if err := a.updateKubeadmJoinSecrets(ctx, string(tokenID), secret); err != nil {
 		return nil, gerrors.Errorf("Failed to update wks join token %s/%s", secret.ObjectMeta.Namespace, secret.ObjectMeta.Name)
 	}
@@ -403,7 +403,6 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 // Update the machine to the provided definition.
 func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) error {
 	contextLog := log.WithFields(log.Fields{"machine": machine.Name, "cluster": c.Name})
-
 	contextLog.Info("updating machine...")
 	installer, closer, err := a.connectTo(ctx, c, eim)
 	if err != nil {
@@ -434,79 +433,19 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	}
 	isMaster := isMaster(node)
 	if isMaster {
-		// Check if kubeadm-certs exists.
-		// If not, ssh in an existing cp node and run
+		// Check if the kubeadm-certs secret exists.
+		// If not, run the renewal plan to upload new certs:
 		// kubeadm init phase upload-certs --upload-certs
-		// and copy out the certificate key (and the discovery token ca cert hash?)
-		// and update wks-controller-secrets
+		// and update wks-controller-secrets with the new certificate key and bootstrap token ID
+		// so that new control plane nodes can be added to the cluster.
 
 		exists, _ := a.kubeadmCertsExists(ctx)
 		if !exists {
-			log.Infof("kubeadm-certs secret not found, regenerating...")
-			var certificateKey string
-			getCertKeyPlan, err := recipe.BuildGetKubeadmCertKeyPlan(ctx, &certificateKey)
+			log.Info("kubeadm-certs secret not found, regenerating...")
+			err = a.renewKubeadmCerts(ctx, installer)
 			if err != nil {
-				log.Errorf("failed to build get kubeadm cert key plan, err: ", err)
 				return err
 			}
-			certificateKey = strings.TrimSuffix(certificateKey, "\n")
-			_, err = getCertKeyPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
-			if err != nil {
-				log.Errorf("Apply of Plan failed:\n%s\n", err)
-				return err
-			}
-			log.Infof(fmt.Sprintf("generated certificate key: %s", certificateKey))
-			log.Infof(fmt.Sprintf("uploading kubeadm certs with cert key: %s", certificateKey))
-			uploadCertsPlan, err := recipe.BuildUploadKubeadmCertsPlan(ctx, certificateKey)
-			if err != nil {
-				log.Errorf("failed to build upload kubeadm certs plan, err: ", err)
-				return err
-			}
-			certificateKey = strings.TrimSuffix(certificateKey, "\n")
-			_, err = uploadCertsPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
-			if err != nil {
-				log.Errorf("Apply of Plan failed:\n%s\n", err)
-				return err
-			}
-
-			secret := corev1.Secret{}
-			secretName := types.NamespacedName{
-				Name:      controllerSecret,
-				Namespace: controllerNamespace,
-			}
-
-			log.Infof("creating a new bootstrap token...")
-			bootstrapTokenSecret, err := a.installNewBootstrapToken(ctx, "kube-system")
-			if err != nil {
-				return gerrors.Errorf("failed to create new bootstrap token, err: %s", err)
-			}
-			tokenID, ok := bootstrapTokenSecret.Data[bootstrapapi.BootstrapTokenIDKey]
-			if !ok {
-				return gerrors.Errorf("token-id not found %s/%s", bootstrapTokenSecret.ObjectMeta.Namespace, bootstrapTokenSecret.ObjectMeta.Name)
-			}
-
-			lenKey := base64.StdEncoding.EncodedLen(len(certificateKey))
-			certificateKeyB64 := make([]byte, lenKey)
-			base64.StdEncoding.Encode(certificateKeyB64, []byte(certificateKey))
-
-			lenTokenID := base64.StdEncoding.EncodedLen(len(tokenID))
-			log.Infof("bootstrap token ID: %s", tokenID)
-			tokenIDB64 := make([]byte, lenTokenID)
-			base64.StdEncoding.Encode(tokenIDB64, []byte(tokenID))
-			patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\", \"%s\":\"%s\"}}",
-				"certificateKey", certificateKeyB64, "bootstrapTokenID", tokenIDB64))
-
-			err = a.Client.Get(ctx, secretName, &secret)
-			if err != nil {
-				log.Infof("failed to get %s in namespace %s %s %v", controllerSecret, controllerNamespace, patch, err)
-				return err
-			}
-			err = a.Client.Patch(ctx, &secret, client.RawPatch(types.StrategicMergePatchType, patch))
-			if err != nil {
-				log.Infof("failed to patch %s secret %s %v", controllerSecret, patch, err)
-				return err
-			}
-
 		}
 
 		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
@@ -607,6 +546,72 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	eim.Status.Ready = true
 
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
+	return nil
+}
+
+func (a *ExistingInfraMachineReconciler) renewKubeadmCerts(ctx context.Context, installer *os.OS) error {
+	var certificateKey string
+
+	// Renewal of kubeadm-certs is done in two plans so that the certificate key, printed
+	// in the output of `kubeadm alpha certs certificate-key` can be passed in the upload certs plan
+	getCertKeyPlan, err := recipe.BuildGetKubeadmCertKeyPlan(ctx, &certificateKey)
+	if err != nil {
+		log.Errorf("failed to build get kubeadm cert key plan, err: ", err)
+		return err
+	}
+	// The certificateKey is populated after applying the get kubeadm cert key plan
+	// Trim the newline suffix that comes with the output of the cli command
+	certificateKey = strings.TrimSuffix(certificateKey, "\n")
+	_, err = getCertKeyPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
+	if err != nil {
+		log.Errorf("Apply of Plan failed:\n%s\n", err)
+		return err
+	}
+	log.Infof(fmt.Sprintf("uploading kubeadm certs with cert key: %s", certificateKey))
+	uploadCertsPlan, err := recipe.BuildUploadKubeadmCertsPlan(ctx, certificateKey)
+	if err != nil {
+		log.Errorf("failed to build upload kubeadm certs plan, err: ", err)
+		return err
+	}
+	_, err = uploadCertsPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
+	if err != nil {
+		log.Errorf("Apply of Plan failed:\n%s\n", err)
+		return err
+	}
+
+	log.Infof("creating a new bootstrap token...")
+	bootstrapTokenSecret, err := a.installNewBootstrapToken(ctx, "kube-system")
+	if err != nil {
+		return gerrors.Errorf("failed to create new bootstrap token, err: %s", err)
+	}
+	tokenID, ok := bootstrapTokenSecret.Data[bootstrapapi.BootstrapTokenIDKey]
+	if !ok {
+		return gerrors.Errorf("token-id not found %s/%s", bootstrapTokenSecret.ObjectMeta.Namespace, bootstrapTokenSecret.ObjectMeta.Name)
+	}
+
+	// Base64 encode the certificate key and token ID
+	certificateKeyB64 := encoding.Base64Encode(certificateKey)
+	tokenIDB64 := encoding.Base64Encode(string(tokenID))
+
+	patch := []byte(fmt.Sprintf("{\"data\":{\"%s\":\"%s\", \"%s\":\"%s\"}}",
+		"certificateKey", certificateKeyB64, "bootstrapTokenID", tokenIDB64))
+
+	// Update wks-controller-secrets with new cert key and bootstrap token ID
+	secret := corev1.Secret{}
+	secretName := types.NamespacedName{
+		Name:      controllerSecret,
+		Namespace: controllerNamespace,
+	}
+	err = a.Client.Get(ctx, secretName, &secret)
+	if err != nil {
+		log.Infof("failed to get %s in namespace %s %s %v", controllerSecret, controllerNamespace, patch, err)
+		return err
+	}
+	err = a.Client.Patch(ctx, &secret, client.RawPatch(types.StrategicMergePatchType, patch))
+	if err != nil {
+		log.Infof("failed to patch %s secret %s %v", controllerSecret, patch, err)
+		return err
+	}
 	return nil
 }
 

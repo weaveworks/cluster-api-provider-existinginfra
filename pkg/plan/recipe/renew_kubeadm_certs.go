@@ -13,7 +13,6 @@ import (
 func BuildGetKubeadmCertKeyPlan(ctx context.Context, certificateKey *string) (*plan.Plan, error) {
 	b := plan.NewBuilder()
 
-	// run kubeadm init phase upload-certs --upload-certs and certificate key output to env var
 	b.AddResource(
 		"renew-certs:kubeadm-alpha-certs-cert-key",
 		&resource.Run{
