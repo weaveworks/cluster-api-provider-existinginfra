@@ -830,7 +830,6 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("kubeadm:prejoin", kadmPJRsrc, plan.DependOn("install:k8s"))
 
 	log.Info("Built join plan")
-	params.CertificateKey = strings.TrimSuffix(params.CertificateKey, "\n")
 
 	kadmJoinRsrc := &resource.KubeadmJoin{
 		IsMaster:                 params.IsMaster,
