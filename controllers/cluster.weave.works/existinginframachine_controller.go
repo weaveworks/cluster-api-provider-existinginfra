@@ -682,7 +682,6 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 }
 
 func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provider *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, machineAddress string, installer *os.OS) (*plan.Plan, error) {
-	log.Infof("Getting node plan for %s", machine.Name)
 	namespace := a.controllerNamespace
 	secrets, err := a.kubeadmJoinSecrets(ctx)
 	if err != nil {
