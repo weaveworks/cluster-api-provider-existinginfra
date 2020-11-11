@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "v0.0.7"
+const ImageTag = "v0.0.8"
