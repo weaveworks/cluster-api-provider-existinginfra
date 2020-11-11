@@ -32,15 +32,6 @@ workflows:
       - integration-tests:
           requires:
             - build
-      - release:
-          requires:
-            - build
-            - unit-tests
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /.*/
 
 jobs:
   build:
