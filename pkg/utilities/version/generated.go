@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "v0.0.8"
+const ImageTag = "WKP-1444-add-nodes-after-kubeadm-certs-have-expired-bb17c2ce"
