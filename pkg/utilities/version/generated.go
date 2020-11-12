@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "update-docker-image-ea20897e"
+const ImageTag = "v0.0.9"
