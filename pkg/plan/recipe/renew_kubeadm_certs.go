@@ -34,7 +34,7 @@ func BuildUploadKubeadmCertsPlan(ctx context.Context, certificateKey string) (*p
 	// run kubeadm init phase upload-certs --upload-certs and certificate key output to env var
 	b.AddResource(
 		"renew-certs:kubeadm-upload-certs",
-		&resource.Run{Script: object.String(fmt.Sprintf("kubeadm init phase upload-certs --upload-certs --certificate-key=%s", certificateKey))})
+		&resource.Run{Script: object.String(fmt.Sprintf("kubeadm init phase upload-certs --upload-certs --certificate-key=%s > /dev/null", certificateKey))})
 
 	p, err := b.Plan()
 	if err != nil {

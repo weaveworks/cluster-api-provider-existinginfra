@@ -54,6 +54,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
+	"k8s.io/kubernetes/cmd/kubeadm/app/phases/copycerts"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/patch"
@@ -609,24 +610,13 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 }
 
 func (a *ExistingInfraMachineReconciler) renewKubeadmCerts(ctx context.Context, installer *os.OS) error {
-	var certificateKey string
-
-	// Renewal of kubeadm-certs is done in two plans so that the certificate key, printed
-	// in the output of `kubeadm alpha certs certificate-key` can be passed in the upload certs plan
-	getCertKeyPlan, err := recipe.BuildGetKubeadmCertKeyPlan(ctx, &certificateKey)
+	// Renewal of kubeadm-certs is done in two steps, generating a certificate key
+	// which is passed to kubeadm upload certs plan
+	certificateKey, err := copycerts.CreateCertificateKey()
 	if err != nil {
-		log.Errorf("failed to build get kubeadm cert key plan, err: %s", err)
 		return err
 	}
-	// The certificateKey is populated after applying the get kubeadm cert key plan
-	// Trim the newline suffix that comes with the output of the cli command
-	_, err = getCertKeyPlan.Apply(ctx, installer.Runner, plan.EmptyDiff())
-	if err != nil {
-		log.Errorf("Apply of Plan failed:\n%s\n", err)
-		return err
-	}
-	certificateKey = strings.TrimSuffix(certificateKey, "\n")
-	log.Infof(fmt.Sprintf("uploading kubeadm certs with cert key: %s", certificateKey))
+	log.Debugf(fmt.Sprintf("uploading kubeadm certs with cert key: %s", certificateKey))
 	uploadCertsPlan, err := recipe.BuildUploadKubeadmCertsPlan(ctx, certificateKey)
 	if err != nil {
 		log.Errorf("failed to build upload kubeadm certs plan, err: %s", err)

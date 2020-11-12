@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "WKP-1444-add-nodes-after-kubeadm-certs-have-expired-bb17c2ce"
+const ImageTag = "update-docker-image-ea20897e"
