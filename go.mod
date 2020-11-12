@@ -23,7 +23,7 @@ require (
     github.com/weaveworks/footloose v0.0.0-20200918140536-ff126705213e // indirect
     github.com/weaveworks/libgitops v0.0.2
     golang.org/x/build v0.0.0-20190927031335-2835ba2e683f
-    golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073
+    golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
     gopkg.in/oleiade/reflections.v1 v1.0.0
     gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
     k8s.io/api v0.18.6
