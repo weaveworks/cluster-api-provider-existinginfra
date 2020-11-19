@@ -67,9 +67,8 @@ func GetEnvSpecificConfig(ctx context.Context, pkgType resource.PkgType, namespa
 
 	// If SELinux is Disabled skip setting it to permissive
 	skipSetSELinuxPermissive := false
-	log.Info("Is SELinux disabled? ", seLinuxMode.IsDisabled())
-	log.Info("SELinuxMode: ", seLinuxMode)
-	if seLinuxMode.IsDisabled() {
+	log.Info("Got SELinuxMode: ", seLinuxMode)
+	if seLinuxMode.IsDisabled() || seLinuxMode.IsPermissive() {
 		skipSetSELinuxPermissive = true
 	}
 
@@ -77,7 +76,7 @@ func GetEnvSpecificConfig(ctx context.Context, pkgType resource.PkgType, namespa
 		ConntrackMax:          0,
 		UseIPTables:           !inContainerVM,
 		SELinuxInstalled:      seLinuxStatus.IsInstalled(),
-		SetSELinuxPermissive:  !inContainerVM && seLinuxStatus.IsInstalled() && seLinuxMode.IsEnforcing() && !skipSetSELinuxPermissive, // if selinux is installed and not disabled, set it to permissive
+		SetSELinuxPermissive:  !inContainerVM && seLinuxStatus.IsInstalled() && seLinuxMode.IsEnforcing() && !skipSetSELinuxPermissive, // if selinux is installed, not disabled and not permissive, set it to permissive
 		LockYUMPkgs:           pkgType == resource.PkgTypeRPM,
 		DisableSwap:           !inContainerVM,
 		IgnorePreflightErrors: ignorePreflightErrors,
