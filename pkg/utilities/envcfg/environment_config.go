@@ -67,6 +67,8 @@ func GetEnvSpecificConfig(ctx context.Context, pkgType resource.PkgType, namespa
 
 	// If SELinux is Disabled skip setting it to permissive
 	skipSetSELinuxPermissive := false
+	log.Info("Is SELinux disabled? ", seLinuxMode.IsDisabled())
+	log.Info("SELinuxMode: ", seLinuxMode)
 	if seLinuxMode.IsDisabled() {
 		skipSetSELinuxPermissive = true
 	}
