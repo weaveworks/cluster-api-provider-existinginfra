@@ -67,20 +67,20 @@ func GetEnvSpecificConfig(ctx context.Context, pkgType resource.PkgType, namespa
 	}
 
 	// If SELinux is Disabled skip setting it to permissive
-	skipSetSELinuxPermissive := false
+	// skipSetSELinuxPermissive := false
 	fmt.Println("Got SELinuxMode: ", seLinuxMode)
 	log.Info("Got SELinuxMode: ", seLinuxMode)
-	if seLinuxMode.IsDisabled() {
-		skipSetSELinuxPermissive = true
-	}
-	fmt.Println("Skip set selinux permissive: ", skipSetSELinuxPermissive)
-	log.Info("Skip set selinux permissive: ", skipSetSELinuxPermissive)
+	// if seLinuxMode.IsDisabled() {
+	// skipSetSELinuxPermissive = true
+	// }
+	// fmt.Println("Skip set selinux permissive: ", skipSetSELinuxPermissive)
+	// ("Skip set selinux permissive: ", skipSetSELinuxPermissive)
 
 	config := &EnvSpecificConfig{
 		ConntrackMax:          0,
 		UseIPTables:           !inContainerVM,
 		SELinuxInstalled:      seLinuxStatus.IsInstalled(),
-		SetSELinuxPermissive:  !inContainerVM && seLinuxStatus.IsInstalled() && seLinuxMode.IsEnforcing() && !skipSetSELinuxPermissive, // if selinux is installed, not disabled and not permissive, set it to permissive
+		SetSELinuxPermissive:  !inContainerVM && seLinuxStatus.IsInstalled() && !seLinuxMode.IsDisabled(), // if selinux is installed and not disabled, set it to permissive
 		LockYUMPkgs:           pkgType == resource.PkgTypeRPM,
 		DisableSwap:           !inContainerVM,
 		IgnorePreflightErrors: ignorePreflightErrors,
