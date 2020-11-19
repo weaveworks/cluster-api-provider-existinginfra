@@ -434,14 +434,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	if err != nil {
 		if apierrs.IsNotFound(err) {
 			log.Infof("no existing node found for %s...", addr)
-			var nodes corev1.NodeList
-			if err := a.Client.List(ctx, &nodes); err == nil {
-				nodeIPs := []string{}
-				for _, node := range nodes.Items {
-					nodeIPs = append(nodeIPs, getNodePrivateAddress(&node))
-				}
-				log.Infof("all existing nodes found: %+v", nodeIPs)
-			}
+			a.displayAllNodes(ctx)
 			log.Infof("creating %s...", addr)
 			// isn't there; try to create it
 
@@ -580,6 +573,17 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
 	return nil
+}
+
+func (a *ExistingInfraMachineReconciler) displayAllNodes(ctx context.Context) {
+	var nodes corev1.NodeList
+	if err := a.Client.List(ctx, &nodes); err == nil {
+		nodeIPs := []string{}
+		for _, node := range nodes.Items {
+			nodeIPs = append(nodeIPs, getNodePrivateAddress(&node))
+		}
+		log.Infof("all existing nodes found: %+v", nodeIPs)
+	}
 }
 
 func (a *ExistingInfraMachineReconciler) renewKubeadmCerts(ctx context.Context, installer *os.OS) error {
@@ -1002,20 +1006,20 @@ func (a *ExistingInfraMachineReconciler) modifyEIM(ctx context.Context, eim *exi
 		var result existinginfrav1.ExistingInfraMachine
 		getErr := a.Client.Get(ctx, client.ObjectKey{Namespace: eim.Namespace, Name: eim.Name}, &result)
 		if getErr != nil {
-			contextLog.Errorf("failed to read machine info, assuming unsafe to update: %v", getErr)
+			contextLog.Errorf("failed to read existinginframachine info, assuming unsafe to update: %v", getErr)
 			return getErr
 		}
 		updater(&result)
 		updateErr := a.Client.Update(ctx, &result)
 		if updateErr != nil {
-			contextLog.Errorf("failed attempt to update machine: %v", updateErr)
+			contextLog.Errorf("failed attempt to update existinginframachine: %v", updateErr)
 			return updateErr
 		}
 		return nil
 	})
 	if retryErr != nil {
-		contextLog.Errorf("failed to update machine: %v", retryErr)
-		return gerrors.Wrapf(retryErr, "Could not update machine: %s", eim.Name)
+		contextLog.Errorf("failed to update existinginframachine: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "Could not update existinginframachine: %s", eim.Name)
 	}
 	return nil
 }
@@ -1307,7 +1311,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}})
 	}
 
-	// Update the config map with the new spec and clear the list of machines (they will get added back after repaving)
+	// Update the config map with the new spec
 	if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
 		configMap.Data["spec"] = specByteHash
 		return nil
