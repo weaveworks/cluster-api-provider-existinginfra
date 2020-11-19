@@ -200,10 +200,6 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 		return err
 	}
 
-	// if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
-	//  return err
-	// }
-
 	// CAPI machine controller requires providerID
 	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
@@ -221,39 +217,6 @@ func (a *ExistingInfraMachineReconciler) getClusterConfigMap(ctx context.Context
 		return nil, err
 	}
 	return &configMap, nil
-}
-
-func (a *ExistingInfraMachineReconciler) addMachineToClusterConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster, newip string) error {
-	configMap, err := a.getClusterConfigMap(ctx, eic)
-	if err != nil {
-		return err
-	}
-	var ips []string
-	if err := yaml.Unmarshal([]byte(configMap.Data["machines"]), &ips); err != nil {
-		return err
-	}
-	if isMachineInList(newip, ips) {
-		return nil
-	}
-	ips = append(ips, newip)
-	ipbytes, err := yaml.Marshal(ips)
-	if err != nil {
-		return err
-	}
-	log.Info("Updating machine config map")
-	return a.updateConfigMap(ctx, a.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
-		configMap.Data["machines"] = string(ipbytes)
-		return nil
-	})
-}
-
-func isMachineInList(newip string, ips []string) bool {
-	for _, ip := range ips {
-		if ip == newip {
-			return true
-		}
-	}
-	return false
 }
 
 func (a *ExistingInfraMachineReconciler) connectTo(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, m *existinginfrav1.ExistingInfraMachine) (*os.OS, io.Closer, error) {
@@ -611,9 +574,6 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		return err
 	}
 
-	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
-		return err
-	}
 	// CAPI machine controller requires providerID
 	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
@@ -1334,12 +1294,10 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	ips := []string{}
 	result := []reconcile.Request{}
 	for _, machine := range machines.Items {
 		privateAddress := machine.Spec.Private.Address
 		log.Infof("Marking: %s for repaving", privateAddress)
-		ips = append(ips, privateAddress)
 		node, err := m.reconciler.findNodeByPrivateAddress(ctx, privateAddress)
 		if err != nil {
 			log.Errorf("Couldn't find node matching machine: %s", machine.Name)
