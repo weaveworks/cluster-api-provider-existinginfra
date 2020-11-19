@@ -200,9 +200,9 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 		return err
 	}
 
-	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
-		return err
-	}
+	// if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
+	//  return err
+	// }
 
 	// CAPI machine controller requires providerID
 	eim.Spec.ProviderID = generateProviderID(node.Name)
@@ -470,18 +470,30 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
 		if apierrs.IsNotFound(err) {
+			log.Infof("no existing node found for %s...", addr)
+			var nodes corev1.NodeList
+			if err := a.Client.List(ctx, &nodes); err == nil {
+				nodeIPs := []string{}
+				for _, node := range nodes.Items {
+					nodeIPs = append(nodeIPs, getNodePrivateAddress(&node))
+				}
+				log.Infof("all existing nodes found: %+v", nodeIPs)
+			}
+			log.Infof("creating %s...", addr)
 			// isn't there; try to create it
 
-			// Since ExistingInfra controller handles boostrapping, add the
-			// finalizer here to ensure we cleanup no delete
-			controllerutil.AddFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
-			if err := a.Client.Update(ctx, eim); err != nil {
-				return err
+			// Since ExistingInfra controller handles bootstrapping, add the
+			// finalizer here to ensure we cleanup on delete
+			if err := a.modifyEIM(ctx, eim, func(e *existinginfrav1.ExistingInfraMachine) {
+				controllerutil.AddFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
+			}); err != nil {
+				return gerrors.Wrapf(err, "failed to add finalizer to: %s", eim.Spec.Private.Address)
 			}
 			return a.create(ctx, installer, c, machine, eim)
 		}
 		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
 	}
+	log.Infof("found existing node for %s...", addr)
 	contextLog = contextLog.WithFields(log.Fields{"node": node.Name})
 
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
@@ -505,6 +517,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		}
 
 		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
+			contextLog.Infof("skipping update for %s...", addr)
 			return err
 		}
 	}
@@ -695,9 +708,6 @@ func (a *ExistingInfraMachineReconciler) kubeadmUpOrDowngrade(ctx context.Contex
 	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
 		return err
 	}
-	if err = a.addMachineToClusterConfigMap(ctx, c, eim.Spec.Private.Address); err != nil {
-		return err
-	}
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
 	return nil
 }
@@ -724,12 +734,15 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 	}); err != nil {
 		return err
 	}
+	log.Info("repaving node...")
 	if err := installer.SetupNode(ctx, nodePlan); err != nil {
 		return gerrors.Wrapf(err, "failed to set up machine %s", machine.Name)
 	}
+	log.Info("uncordoning node...")
 	if err := a.uncordon(ctx, node); err != nil {
 		return err
 	}
+	log.Info("finished updating node...")
 	return nil
 }
 
@@ -1023,20 +1036,60 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeNam
 	return nil
 }
 
+func (a *ExistingInfraMachineReconciler) modifyEIM(ctx context.Context, eim *existinginfrav1.ExistingInfraMachine, updater func(*existinginfrav1.ExistingInfraMachine)) error {
+	contextLog := log.WithFields(log.Fields{"eim": eim.Name})
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var result existinginfrav1.ExistingInfraMachine
+		getErr := a.Client.Get(ctx, client.ObjectKey{Namespace: eim.Namespace, Name: eim.Name}, &result)
+		if getErr != nil {
+			contextLog.Errorf("failed to read machine info, assuming unsafe to update: %v", getErr)
+			return getErr
+		}
+		updater(&result)
+		updateErr := a.Client.Update(ctx, &result)
+		if updateErr != nil {
+			contextLog.Errorf("failed attempt to update machine: %v", updateErr)
+			return updateErr
+		}
+		return nil
+	})
+	if retryErr != nil {
+		contextLog.Errorf("failed to update machine: %v", retryErr)
+		return gerrors.Wrapf(retryErr, "Could not update machine: %s", eim.Name)
+	}
+	return nil
+}
+
 func (a *ExistingInfraMachineReconciler) checkMasterHAConstraint(ctx context.Context, nodeBeingUpdated *corev1.Node) error {
+	// We check machines rather than nodes to establish quorum as nodes get deleted during update
+	var machines clusterv1.MachineList
+	err := a.Client.List(ctx, &machines)
+	if err != nil {
+		return gerrors.Wrap(err, "failed to list machines")
+	}
+	controlPlaneCount := 0
+	for _, machine := range machines.Items {
+		if machine.Labels["set"] == "master" {
+			controlPlaneCount++
+		}
+	}
+
 	nodes, err := a.getMasterNodes(ctx)
 	if err != nil {
 		// If we can't read the nodes, return the error so we don't
 		// accidentally flush the sole master
 		return err
 	}
+
 	avail := 0
-	quorum := (len(nodes) + 1) / 2
+	quorum := (controlPlaneCount + 1) / 2
+
 	for _, node := range nodes {
 		if sameNode(nodeBeingUpdated, node) {
 			continue
 		}
-		if hasConditionTrue(node, corev1.NodeReady) && !hasTaint(node, "NoSchedule") {
+		if hasConditionTrue(node, corev1.NodeReady) && !hasNonMasterNoScheduleTaint(node) {
+			log.Infof("available master: %v", getNodePrivateAddress(node))
 			avail++
 			if avail >= quorum {
 				return nil
@@ -1061,9 +1114,11 @@ func hasConditionTrue(node *corev1.Node, typ corev1.NodeConditionType) bool {
 	return false
 }
 
-func hasTaint(node *corev1.Node, value string) bool {
+func hasNonMasterNoScheduleTaint(node *corev1.Node) bool {
+	effect := v1.TaintEffect("NoSchedule")
+
 	for _, taint := range node.Spec.Taints {
-		if taint.Value == value {
+		if taint.Key != masterLabel && taint.Effect == effect {
 			return true
 		}
 	}
@@ -1233,14 +1288,15 @@ type MachineMapper struct {
 // Map processes changes to a cluster spec that affect the machines; look up machines in config map
 // and queue them for reconcile when the cluster spec changes
 func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
+	ctx := context.Background()
 	ns := mo.Meta.GetNamespace()
 	name := mo.Meta.GetName()
 	eic := &existinginfrav1.ExistingInfraCluster{}
-	err := m.reconciler.Client.Get(context.TODO(), client.ObjectKey{Namespace: ns, Name: name}, eic)
+	err := m.reconciler.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, eic)
 	if err != nil {
 		return nil
 	}
-	cmap, err := m.reconciler.getClusterConfigMap(context.TODO(), eic)
+	cmap, err := m.reconciler.getClusterConfigMap(ctx, eic)
 	if err != nil {
 		return nil
 	}
@@ -1250,8 +1306,9 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	if err != nil {
 		return nil
 	}
-	specByteHash := fmt.Sprintf("%v", sha256.Sum256(specBytes))
-	existingSpecHash := []byte(cmap.Data["spec"])
+	hash := sha256.Sum256(specBytes)
+	specByteHash := base64.StdEncoding.EncodeToString(hash[:])
+	existingSpecHash := cmap.Data["spec"]
 	if len(specByteHash) == len(existingSpecHash) {
 		differ := false
 		for idx := range specByteHash {
@@ -1265,30 +1322,36 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		}
 	}
 	log.Info("Cluster configuration changed; marking machines as needing repaving")
-	if err := m.reconciler.updateAPIServerArgs(context.TODO(), &eic.Spec.APIServer.ExtraArguments); err != nil {
+	if err := m.reconciler.updateAPIServerArgs(ctx, &eic.Spec.APIServer.ExtraArguments); err != nil {
 		log.Errorf("failed to update API server args: %v", err)
 		return nil
 	}
 
-	// Find the machines needing update
-	result := []reconcile.Request{}
-	machineBytes := []byte(cmap.Data["machines"])
-	var ips []string
-	if err := yaml.Unmarshal(machineBytes, &ips); err != nil {
+	// Find the machines needing update and mark them
+	var machines existinginfrav1.ExistingInfraMachineList
+	if err := m.reconciler.Client.List(ctx, &machines); err != nil {
+		log.Errorf("failed to list machines: %v", err)
 		return nil
 	}
-	for _, ip := range ips {
-		m, err := m.reconciler.findMachineByPrivateAddress(context.TODO(), ip)
+
+	ips := []string{}
+	result := []reconcile.Request{}
+	for _, machine := range machines.Items {
+		privateAddress := machine.Spec.Private.Address
+		log.Infof("Marking: %s for repaving", privateAddress)
+		ips = append(ips, privateAddress)
+		node, err := m.reconciler.findNodeByPrivateAddress(ctx, privateAddress)
 		if err != nil {
+			log.Errorf("Couldn't find node matching machine: %s", machine.Name)
 			continue
 		}
-		result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: m.Namespace, Name: m.Name}})
+		m.reconciler.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, `{"cluster": "modified"}`)
+		result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}})
 	}
 
 	// Update the config map with the new spec and clear the list of machines (they will get added back after repaving)
-	if err := m.reconciler.updateConfigMap(context.TODO(), m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
-		configMap.Data["spec"] = string(specBytes)
-		configMap.Data["machines"] = "[]"
+	if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
+		configMap.Data["spec"] = specByteHash
 		return nil
 	}); err != nil {
 		log.Errorf("Failed to update cluster config map: %v", err)

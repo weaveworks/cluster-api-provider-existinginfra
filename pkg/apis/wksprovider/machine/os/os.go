@@ -422,7 +422,8 @@ func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace
 	if err != nil {
 		return nil, err
 	}
-	configMap.Data["spec"] = fmt.Sprintf("%v", sha256.Sum256(specBytes))
+	hash := sha256.Sum256(specBytes)
+	configMap.Data["spec"] = base64.StdEncoding.EncodeToString(hash[:])
 
 	machineList := []string{seedNodeIP}
 	machineListBytes, err := json.Marshal(machineList)
