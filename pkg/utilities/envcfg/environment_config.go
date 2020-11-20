@@ -2,7 +2,6 @@ package envcfg
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -66,16 +65,7 @@ func GetEnvSpecificConfig(ctx context.Context, pkgType resource.PkgType, namespa
 		}
 	}
 
-	// If SELinux is Disabled skip setting it to permissive
-	// skipSetSELinuxPermissive := false
-	fmt.Println("Got SELinuxMode: ", seLinuxMode)
-	log.Info("Got SELinuxMode: ", seLinuxMode)
-	// if seLinuxMode.IsDisabled() {
-	// skipSetSELinuxPermissive = true
-	// }
-	// fmt.Println("Skip set selinux permissive: ", skipSetSELinuxPermissive)
-	// ("Skip set selinux permissive: ", skipSetSELinuxPermissive)
-
+	log.Debug("Current SELinuxMode: ", seLinuxMode)
 	config := &EnvSpecificConfig{
 		ConntrackMax:          0,
 		UseIPTables:           !inContainerVM,
