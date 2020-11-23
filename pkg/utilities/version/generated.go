@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "v0.0.9"
+const ImageTag = "fix-selinux-permissive-undo-script-df5d5d4b"

@@ -255,7 +255,7 @@ func TestGetEnvSpecificConfig(t *testing.T) {
 			},
 
 			wantUseIPTables:          true,
-			wantSetSELinuxPermissive: true,
+			wantSetSELinuxPermissive: false,
 			wantDisableSwap:          true,
 			wantLockYUMPkgs:          false,
 			wantNamespace:            "foo",

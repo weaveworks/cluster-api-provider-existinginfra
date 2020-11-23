@@ -559,6 +559,17 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.Worker)
 	}
 
+	isOriginal, err := a.isOriginalMaster(ctx, node)
+	if err != nil {
+		return err
+	}
+
+	log.Info("Is original control plane node: ", isOriginal)
+	log.Info("ControlPlaneEndpoint: ", c.Spec.ControlPlaneEndpoint)
+	if isOriginal && c.Spec.ControlPlaneEndpoint == "" {
+		return errors.New("cannot perform update of original control plane node without a control plane load balacer")
+	}
+
 	if err = a.performActualUpdate(ctx, installer, machine, node, nodePlan, c); err != nil {
 		return err
 	}
