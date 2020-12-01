@@ -1281,8 +1281,6 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	log.Infof("CMAP: %#v", cmap)
-
 	// Check if the cluster spec has changed; if it's the first time, the spec will be empty but
 	// the machines get one free reconcile each so we won't pass them along in this case.
 
@@ -1302,7 +1300,6 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	log.Infof("SBH: %s, ESH: %s", specByteHash, existingSpecHash)
 	log.Info("Cluster configuration changed; marking machines as needing repaving")
 
 	if err := m.reconciler.updateAPIServerArgs(ctx, &eic.Spec.APIServer.ExtraArguments); err != nil {
