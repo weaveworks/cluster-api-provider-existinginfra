@@ -244,9 +244,9 @@ func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount in
 	for ; retryCount > 0; retryCount-- {
 		out, eout, err := c.sshCall(ip, port, cmd)
 		if err == nil {
-			log.Infof("Call failed: %s, %s, %v", out, eout, err)
 			return
 		}
+		log.Infof("Call failed: %s, %s, %v", out, eout, err)
 	}
 }
 

@@ -253,14 +253,14 @@ func ensureNewArgumentsWereProcessed(c *testContext) {
 	for name, val := range kubeletArgs {
 		for _, conn := range conns {
 			argString := fmt.Sprintf("%s=%s", name, val)
-			c.makeSSHCallAndCheckError(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep /usr/bin/kubelet | grep %s", argString))
+			c.makeSSHCallWithRetries(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep /usr/bin/kubelet | grep %s", argString), 5)
 		}
 	}
 
 	for name, val := range apiServerArgs {
 		for _, conn := range conns {
 			argString := fmt.Sprintf("%s=%s", name, val)
-			c.makeSSHCallAndCheckError(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString))
+			c.makeSSHCallWithRetries(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString), 5)
 		}
 	}
 }
