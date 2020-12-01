@@ -239,7 +239,7 @@ func (c *testContext) makeSSHCallAndCheckError(ip, port, cmd string) {
 		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
 }
 
-// Make an ssh call and fail if it errors after "n" retries
+// Make an ssh call and fail if it errors after "n" retries; display any errors that occur
 func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount int) {
 	for ; retryCount > 0; retryCount-- {
 		out, eout, err := c.sshCall(ip, port, cmd)
