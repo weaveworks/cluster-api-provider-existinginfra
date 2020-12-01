@@ -292,7 +292,7 @@ func (c *testContext) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{@.spec.unschedulable}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
 
 	unreadySeen := ""
-	for retryCount := 1; retryCount <= 20; retryCount++ {
+	for retryCount := 1; retryCount <= 100; retryCount++ {
 		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		if err != nil {
 			time.Sleep(time.Second * 5)
@@ -314,8 +314,10 @@ func (c *testContext) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 				unreadySeen = nameAndConditions[0]
 			}
 		}
-		log.Infof("Waiting for all %s to have stopped running, retry: %d...", itemType, retryCount)
-		time.Sleep(30 * time.Second)
+		if retryCount%10 == 0 {
+			log.Infof("Waiting for all %s to have stopped running, retry: %d...", itemType, retryCount)
+		}
+		time.Sleep(5 * time.Second)
 	}
 	require.FailNow(c.t, fmt.Sprintf("Some %s did not stop running...", itemType))
 }
