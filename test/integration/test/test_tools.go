@@ -246,7 +246,7 @@ func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount in
 		if err == nil {
 			return
 		}
-		log.Infof("Call failed: %s, %s, %v", out, eout, err)
+		log.Infof("Call '%s' failed: %s, %s, %v", cmd, out, eout, err)
 	}
 }
 

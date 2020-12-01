@@ -1003,6 +1003,7 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeNam
 		updateErr := a.Client.Update(ctx, &result)
 		if updateErr != nil {
 			contextLog.Errorf("failed attempt to update node: %v", updateErr)
+			// Sleep so we don't consume all the retries in a single timestamp - this can lead to failure
 			time.Sleep(2 * time.Second)
 			return updateErr
 		}
@@ -1330,7 +1331,6 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		isOrig, err := m.reconciler.isOriginalMaster(ctx, node)
 		if err != nil {
 			log.Errorf("Could not determine if node is original master: %s", node.Name)
-			continue
 		}
 
 		requeueRequest := createRequeueRequest(&machine)
