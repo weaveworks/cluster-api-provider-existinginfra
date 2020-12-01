@@ -196,13 +196,12 @@ func (a *ExistingInfraMachineReconciler) create(ctx context.Context, installer *
 	if err != nil {
 		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
 	}
-	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
-		return err
-	}
 	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, nodePlan.ToState().ToJSON()); err != nil {
 		return err
 	}
-
+	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
+		return err
+	}
 	// CAPI machine controller requires providerID
 	eim.Spec.ProviderID = generateProviderID(node.Name)
 	eim.Status.Ready = true
@@ -1004,12 +1003,13 @@ func (a *ExistingInfraMachineReconciler) modifyNode(ctx context.Context, nodeNam
 		updateErr := a.Client.Update(ctx, &result)
 		if updateErr != nil {
 			contextLog.Errorf("failed attempt to update node: %v", updateErr)
+			time.Sleep(2 * time.Second)
 			return updateErr
 		}
 		return nil
 	})
 	if retryErr != nil {
-		contextLog.Errorf("failed to update node annotation: %v", retryErr)
+		contextLog.Errorf("failed to update node: %v", retryErr)
 		return gerrors.Wrapf(retryErr, "Could not mark node %s as updated", nodeName)
 	}
 	return nil
@@ -1267,6 +1267,7 @@ type MachineMapper struct {
 // Map processes changes to a cluster spec that affect the machines; look up machines in config map
 // and queue them for reconcile when the cluster spec changes
 func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
+	log.Infof("Got update for: %s/%s", mo.Meta.GetNamespace(), mo.Meta.GetName())
 	ctx := context.Background()
 	ns := mo.Meta.GetNamespace()
 	name := mo.Meta.GetName()
@@ -1280,6 +1281,8 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
+	log.Infof("CMAP: %#v", cmap)
+
 	// Check if the cluster spec has changed; if it's the first time, the spec will be empty but
 	// the machines get one free reconcile each so we won't pass them along in this case.
 
@@ -1287,32 +1290,20 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	savedKubernetesVersion := eic.Spec.KubernetesVersion
-	nonVersionChangeOccurred := false
-	specByteHash := ""
-
-	// Use hash without a version so we can easily tell if the version was the only thing that changed (i.e. upgrade)
-	eic.Spec.KubernetesVersion = "" // calculate spec w/o version
 	specBytes, err := json.Marshal(eic.Spec)
-	eic.Spec.KubernetesVersion = savedKubernetesVersion // restore version
 	if err != nil {
 		return nil
 	}
 	hash := sha256.Sum256(specBytes)
-	specByteHash = base64.StdEncoding.EncodeToString(hash[:])
+	specByteHash := base64.StdEncoding.EncodeToString(hash[:])
 
 	existingSpecHash := cmap.Data["spec"]
-	if specByteHash != existingSpecHash {
-		nonVersionChangeOccurred = true
-	} else if cmap.Data["kubernetesVersion"] == savedKubernetesVersion {
-		return nil // nothing changed
+	if specByteHash == existingSpecHash {
+		return nil
 	}
 
-	if nonVersionChangeOccurred {
-		log.Info("Cluster configuration changed; marking machines as needing repaving")
-	} else {
-		log.Info("Cluster version changed; marking machines as needing upgrades")
-	}
+	log.Infof("SBH: %s, ESH: %s", specByteHash, existingSpecHash)
+	log.Info("Cluster configuration changed; marking machines as needing repaving")
 
 	if err := m.reconciler.updateAPIServerArgs(ctx, &eic.Spec.APIServer.ExtraArguments); err != nil {
 		log.Errorf("failed to update API server args: %v", err)
@@ -1359,7 +1350,6 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 
 	orderedRequests := append(append(originalcp, cps...), workers...)
 
-	log.Infof("OR: %#v", orderedRequests)
 	// Update the config map with the new spec
 	if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
 		configMap.Data["spec"] = specByteHash

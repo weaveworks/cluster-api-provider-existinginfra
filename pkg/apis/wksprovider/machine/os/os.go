@@ -414,7 +414,6 @@ func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace
 	}
 
 	configMap.Data["spec"] = ""
-	configMap.Data["kubernetesVersion"] = eic.Spec.KubernetesVersion
 	return configMap
 }
 
