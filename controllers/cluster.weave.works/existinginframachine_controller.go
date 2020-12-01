@@ -1284,7 +1284,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	// Check if the cluster spec has changed; if it's the first time, the spec will be empty but
 	// the machines get one free reconcile each so we won't pass them along in this case.
 
-	if cmap.Data["spec"] == "" { // first time
+	if cmap.Data["spec"] == "" && !eic.Spec.WorkloadCluster { // first time
 		return nil
 	}
 
