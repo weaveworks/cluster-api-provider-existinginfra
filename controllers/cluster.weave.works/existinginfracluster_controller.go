@@ -380,10 +380,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 }
 
 func (r *ExistingInfraClusterReconciler) createClusterConfigMap(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, seedNodeIP string) error {
-	configMap, err := capeios.CreateClusterConfigMap(eic, r.ControllerNamespace, seedNodeIP)
-	if err != nil {
-		return err
-	}
+	configMap := capeios.CreateClusterConfigMap(eic, r.ControllerNamespace)
 	return r.Client.Create(ctx, configMap)
 }
 

@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "v0.1.0"
+const ImageTag = "WKP-1542-upgrade-issues-e84a7fd4-WIP"

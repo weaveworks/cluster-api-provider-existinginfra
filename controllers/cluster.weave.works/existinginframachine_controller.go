@@ -170,9 +170,12 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		return ctrl.Result{}, err
 	}
 
-	err = a.update(ctx, eic, machine, eim)
+	reschedule, err := a.update(ctx, eic, machine, eim)
 	if err != nil {
 		contextLog.Errorf("failed to update machine: %v", err)
+	}
+	if reschedule {
+		return ctrl.Result{Requeue: true}, nil
 	}
 	return ctrl.Result{}, err
 }
@@ -420,12 +423,12 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 }
 
 // Update the machine to the provided definition.
-func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) error {
+func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) (bool, error) {
 	contextLog := log.WithFields(log.Fields{"machine": machine.Name, "cluster": c.Name})
 	contextLog.Info("updating machine...")
 	installer, closer, err := a.connectTo(ctx, c, eim)
 	if err != nil {
-		return gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name)
+		return false, gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name)
 	}
 	defer closer.Close()
 
@@ -443,17 +446,17 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 			if err := a.modifyEIM(ctx, eim, func(e *existinginfrav1.ExistingInfraMachine) {
 				controllerutil.AddFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
 			}); err != nil {
-				return gerrors.Wrapf(err, "failed to add finalizer to: %s", eim.Spec.Private.Address)
+				return false, gerrors.Wrapf(err, "failed to add finalizer to: %s", eim.Spec.Private.Address)
 			}
-			return a.create(ctx, installer, c, machine, eim)
+			return false, a.create(ctx, installer, c, machine, eim)
 		}
-		return gerrors.Wrapf(err, "failed to find node by address: %s", addr)
+		return false, gerrors.Wrapf(err, "failed to find node by address: %s", addr)
 	}
 	log.Infof("found existing node for %s...", addr)
 	contextLog = contextLog.WithFields(log.Fields{"node": node.Name})
 
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
-		return err
+		return false, err
 	}
 	isMaster := isMaster(node)
 	if isMaster {
@@ -468,35 +471,35 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 			log.Info("kubeadm-certs secret not found, regenerating...")
 			err = a.renewKubeadmCerts(ctx, installer)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 
 		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
 			contextLog.Infof("skipping update for %s...", addr)
-			return err
+			return false, err
 		}
 	}
 	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
 	if err != nil {
-		return gerrors.Wrapf(err, "Failed to get node plan for machine %s", machine.Name)
+		return false, gerrors.Wrapf(err, "Failed to get node plan for machine %s", machine.Name)
 	}
 	planState := nodePlan.ToState()
 	currentPlan, found := node.Annotations[recipe.PlanKey]
 	if !found {
 		contextLog.Info("No plan annotation on Node; unable to update")
-		return nil
+		return false, nil
 	}
 	currentState, err := plan.NewStateFromJSON(strings.NewReader(currentPlan))
 	if err != nil {
-		return gerrors.Wrapf(err, "Failed to parse node plan for machine %s", machine.Name)
+		return false, gerrors.Wrapf(err, "Failed to parse node plan for machine %s", machine.Name)
 	}
 	// check equality by re-serialising to JSON; this avoids any formatting differences, also
 	// type differences between deserialised State and State created from Plan.
 	planJSON := planState.ToJSON()
 	if currentState.ToJSON() == planJSON {
 		contextLog.Info("Machine and node have matching plans; nothing to do")
-		return nil
+		return false, nil
 	}
 
 	if diffedPlan, err := currentState.Diff(planState); err == nil {
@@ -512,31 +515,32 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	contextLog.Infof("Is master: %t, is up or downgrade: %t", isMaster, upOrDowngrade)
 	if upOrDowngrade {
 		if err := checkForVersionJump(machine, node); err != nil {
-			return err
+			return false, err
 		}
 		version := machineutil.GetKubernetesVersion(machine)
 		nodeStyleVersion := "v" + version
 		originalNeedsUpdate, err := a.checkIfOriginalMasterNotAtVersion(ctx, nodeStyleVersion)
 		if err != nil {
-			return err
+			return false, err
 		}
 		contextLog.Infof("Original needs update: %t", originalNeedsUpdate)
 		masterNeedsUpdate, err := a.checkIfMasterNotAtVersion(ctx, nodeStyleVersion)
 		if err != nil {
-			return err
+			return false, err
 		}
 		contextLog.Infof("Master needs update: %t", masterNeedsUpdate)
 		isOriginal, err := a.isOriginalMaster(ctx, node)
 		if err != nil {
-			return err
+			return false, err
 		}
 		contextLog.Infof("Is original: %t", isOriginal)
 		if (!isOriginal && originalNeedsUpdate) || (!isMaster && masterNeedsUpdate) {
-			return errors.New("Master nodes must be upgraded before worker nodes")
+			log.Info("Master nodes must be upgraded before worker nodes")
+			return true, nil
 		}
 		isController, err := a.isControllerNode(ctx, node)
 		if err != nil {
-			return err
+			return false, err
 		}
 		contextLog.Infof("Is controller: %t", isController)
 		if isMaster {
@@ -548,34 +552,34 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 					DeleteLocalData:     true,
 					IgnoreAllDaemonSets: true,
 				}); err != nil {
-					return err
+					return false, err
 				}
 			case isOriginal:
-				return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.OriginalMaster)
+				return false, a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.OriginalMaster)
 			default:
-				return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.SecondaryMaster)
+				return false, a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.SecondaryMaster)
 			}
 		}
-		return a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.Worker)
+		return false, a.kubeadmUpOrDowngrade(ctx, c, machine, eim, node, installer, version, planJSON, recipe.Worker)
 	}
 
 	isOriginal, err := a.isOriginalMaster(ctx, node)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	log.Info("Is original control plane node: ", isOriginal)
 	log.Info("ControlPlaneEndpoint: ", c.Spec.ControlPlaneEndpoint)
 	if isOriginal && c.Spec.ControlPlaneEndpoint == "" {
-		return errors.New("cannot perform update of original control plane node without a control plane load balacer")
+		return false, errors.New("cannot perform update of original control plane node without a control plane load balacer")
 	}
 
 	if err = a.performActualUpdate(ctx, installer, machine, node, nodePlan, c); err != nil {
-		return err
+		return false, err
 	}
 
 	if err = a.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, planJSON); err != nil {
-		return err
+		return false, err
 	}
 
 	// CAPI machine controller requires providerID
@@ -583,7 +587,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	eim.Status.Ready = true
 
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
-	return nil
+	return false, nil
 }
 
 func (a *ExistingInfraMachineReconciler) displayAllNodes(ctx context.Context) {
@@ -1276,27 +1280,40 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	// Check if the cluster spec has changed
+	// Check if the cluster spec has changed; if it's the first time, the spec will be empty but
+	// the machines get one free reconcile each so we won't pass them along in this case.
+
+	if cmap.Data["spec"] == "" { // first time
+		return nil
+	}
+
+	savedKubernetesVersion := eic.Spec.KubernetesVersion
+	nonVersionChangeOccurred := false
+	specByteHash := ""
+
+	// Use hash without a version so we can easily tell if the version was the only thing that changed (i.e. upgrade)
+	eic.Spec.KubernetesVersion = "" // calculate spec w/o version
 	specBytes, err := json.Marshal(eic.Spec)
+	eic.Spec.KubernetesVersion = savedKubernetesVersion // restore version
 	if err != nil {
 		return nil
 	}
 	hash := sha256.Sum256(specBytes)
-	specByteHash := base64.StdEncoding.EncodeToString(hash[:])
+	specByteHash = base64.StdEncoding.EncodeToString(hash[:])
+
 	existingSpecHash := cmap.Data["spec"]
-	if len(specByteHash) == len(existingSpecHash) {
-		differ := false
-		for idx := range specByteHash {
-			if specByteHash[idx] != existingSpecHash[idx] {
-				differ = true
-				break
-			}
-		}
-		if !differ {
-			return nil
-		}
+	if specByteHash != existingSpecHash {
+		nonVersionChangeOccurred = true
+	} else if cmap.Data["kubernetesVersion"] == savedKubernetesVersion {
+		return nil // nothing changed
 	}
-	log.Info("Cluster configuration changed; marking machines as needing repaving")
+
+	if nonVersionChangeOccurred {
+		log.Info("Cluster configuration changed; marking machines as needing repaving")
+	} else {
+		log.Info("Cluster version changed; marking machines as needing upgrades")
+	}
+
 	if err := m.reconciler.updateAPIServerArgs(ctx, &eic.Spec.APIServer.ExtraArguments); err != nil {
 		log.Errorf("failed to update API server args: %v", err)
 		return nil
@@ -1309,7 +1326,10 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	result := []reconcile.Request{}
+	originalcp := []reconcile.Request{}
+	cps := []reconcile.Request{}
+	workers := []reconcile.Request{}
+
 	for _, machine := range machines.Items {
 		privateAddress := machine.Spec.Private.Address
 		log.Infof("Marking: %s for repaving", privateAddress)
@@ -1318,10 +1338,28 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 			log.Errorf("Couldn't find node matching machine: %s", machine.Name)
 			continue
 		}
+
+		isOrig, err := m.reconciler.isOriginalMaster(ctx, node)
+		if err != nil {
+			log.Errorf("Could not determine if node is original master: %s", node.Name)
+			continue
+		}
+
+		requeueRequest := createRequeueRequest(&machine)
+		switch {
+		case isOrig:
+			originalcp = append(originalcp, requeueRequest)
+		case isMaster(node):
+			cps = append(cps, requeueRequest)
+		default:
+			workers = append(workers, requeueRequest)
+		}
 		m.reconciler.setNodeAnnotation(ctx, node.Name, recipe.PlanKey, `{"cluster": "modified"}`)
-		result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}})
 	}
 
+	orderedRequests := append(append(originalcp, cps...), workers...)
+
+	log.Infof("OR: %#v", orderedRequests)
 	// Update the config map with the new spec
 	if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
 		configMap.Data["spec"] = specByteHash
@@ -1331,7 +1369,11 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	return result
+	return orderedRequests
+}
+
+func createRequeueRequest(machine *existinginfrav1.ExistingInfraMachine) reconcile.Request {
+	return reconcile.Request{NamespacedName: types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}}
 }
 
 // updateAPIServerArgs updates the kubeadm-config config map with new apiserver arguments so that control plane nodes will pick them
