@@ -3,7 +3,6 @@ package os
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -382,11 +381,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	}
 
 	// Create a config map tracking cluster parameters and node creation
-	cmap, err := CreateClusterConfigMap(&params.ExistingInfraCluster, params.Namespace, params.PrivateIP)
-	if err != nil {
-		return nil, err
-	}
-
+	cmap := CreateClusterConfigMap(&params.ExistingInfraCluster, params.Namespace)
 	cmapManifest, err := yaml.Marshal(cmap)
 	if err != nil {
 		return nil, err
@@ -408,7 +403,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	return CreatePlan(b)
 }
 
-func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace, seedNodeIP string) (*v1.ConfigMap, error) {
+func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace string) *v1.ConfigMap {
 	configMap := &v1.ConfigMap{}
 	configMap.TypeMeta.APIVersion = "v1"
 	configMap.TypeMeta.Kind = "ConfigMap"
@@ -418,20 +413,8 @@ func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace
 		configMap.Data = map[string]string{}
 	}
 
-	specBytes, err := json.Marshal(eic.Spec)
-	if err != nil {
-		return nil, err
-	}
-	hash := sha256.Sum256(specBytes)
-	configMap.Data["spec"] = base64.StdEncoding.EncodeToString(hash[:])
-
-	machineList := []string{seedNodeIP}
-	machineListBytes, err := json.Marshal(machineList)
-	if err != nil {
-		return nil, err
-	}
-	configMap.Data["machines"] = string(machineListBytes)
-	return configMap, nil
+	configMap.Data["spec"] = ""
+	return configMap
 }
 
 func addSealedSecretWaitIfNecessary(b *plan.Builder, key, cert string) string {

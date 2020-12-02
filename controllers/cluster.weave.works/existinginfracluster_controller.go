@@ -363,7 +363,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 
 	log.Infof("About to create cluster config map: %s/%s", r.ControllerNamespace, eic.Name)
 
-	if err := r.createClusterConfigMap(ctx, eic, seedNodeIP); err != nil {
+	if err := r.createClusterConfigMap(ctx, eic); err != nil {
 		return gerrors.Wrapf(err, "failed to create cluster config map")
 	}
 
@@ -379,11 +379,8 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 	return nil
 }
 
-func (r *ExistingInfraClusterReconciler) createClusterConfigMap(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster, seedNodeIP string) error {
-	configMap, err := capeios.CreateClusterConfigMap(eic, r.ControllerNamespace, seedNodeIP)
-	if err != nil {
-		return err
-	}
+func (r *ExistingInfraClusterReconciler) createClusterConfigMap(ctx context.Context, eic *clusterweaveworksv1alpha3.ExistingInfraCluster) error {
+	configMap := capeios.CreateClusterConfigMap(eic, r.ControllerNamespace)
 	return r.Client.Create(ctx, configMap)
 }
 

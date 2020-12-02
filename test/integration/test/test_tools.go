@@ -239,6 +239,17 @@ func (c *testContext) makeSSHCallAndCheckError(ip, port, cmd string) {
 		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
 }
 
+// Make an ssh call and fail if it errors after "n" retries; display any errors that occur
+func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount int) {
+	for ; retryCount > 0; retryCount-- {
+		out, eout, err := c.sshCall(ip, port, cmd)
+		if err == nil {
+			return
+		}
+		log.Infof("Call '%s' failed: %s, %s, %v", cmd, out, eout, err)
+	}
+}
+
 // Check that a specified number of a resource type is running
 func (c *testContext) ensureCount(itemType string, count int, kubeconfigPath string) {
 	for retryCount := 1; retryCount <= 30; retryCount++ {
@@ -292,7 +303,7 @@ func (c *testContext) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 		`jsonpath={range .items[*]}{"\n"}{@.metadata.name}:{@.spec.unschedulable}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}`}
 
 	unreadySeen := ""
-	for retryCount := 1; retryCount <= 20; retryCount++ {
+	for retryCount := 1; retryCount <= 100; retryCount++ {
 		cmdResults, _, err := c.runCollectingOutputWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)}, cmdItems...)
 		if err != nil {
 			time.Sleep(time.Second * 5)
@@ -314,8 +325,10 @@ func (c *testContext) ensureAllStoppedRunning(itemType, kubeconfigPath string) {
 				unreadySeen = nameAndConditions[0]
 			}
 		}
-		log.Infof("Waiting for all %s to have stopped running, retry: %d...", itemType, retryCount)
-		time.Sleep(30 * time.Second)
+		if retryCount%10 == 0 {
+			log.Infof("Waiting for all %s to have stopped running, retry: %d...", itemType, retryCount)
+		}
+		time.Sleep(5 * time.Second)
 	}
 	require.FailNow(c.t, fmt.Sprintf("Some %s did not stop running...", itemType))
 }
