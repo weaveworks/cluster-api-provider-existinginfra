@@ -30,6 +30,7 @@ func Drain(node *corev1.Node, clientSet kubernetes.Interface, params Params) err
 	defer drainLog.Close()
 	drainer := &drain.Helper{
 		Client:              clientSet,
+		GracePeriodSeconds:  -1,
 		Force:               params.Force,
 		DeleteLocalData:     params.DeleteLocalData,
 		IgnoreAllDaemonSets: params.IgnoreAllDaemonSets,
