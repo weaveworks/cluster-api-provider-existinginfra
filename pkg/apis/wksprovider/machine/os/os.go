@@ -29,7 +29,6 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	"github.com/weaveworks/libgitops/pkg/serializer"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/apps/v1beta2"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -541,7 +540,7 @@ func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 		return manifest, nil
 	}
 	fullOverride := strings.Contains(controllerImageOverride, ":")
-	d := &v1beta2.Deployment{}
+	d := &appsv1.Deployment{}
 	if err := yaml.Unmarshal(manifest, d); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal WKS controller's manifest")
 	}
