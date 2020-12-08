@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"bytes"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -220,6 +221,169 @@ spec:
 
 `
 	newNamespace = "testnamespace"
+
+	imageUpdateYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.14.2
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+  labels:
+    app: nginx
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.14.2
+      ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-deployment
+      labels:
+        app: nginx
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: nginx
+      template:
+        metadata:
+          labels:
+            app: nginx
+        spec:
+          containers:
+            - name: nginx
+              image: nginx:1.14.2
+              ports:
+                - containerPort: 80
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-deployment2
+      labels:
+        app: nginx
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: nginx
+      template:
+        metadata:
+          labels:
+            app: nginx
+        spec:
+          containers:
+            - name: nginx
+              image: nginx:1.14.2
+              ports:
+                - containerPort: 80
+`
+	postProcessedImageUpdateYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.14.2-suffix628
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+  labels:
+    app: nginx
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.14.2-suffix628
+      ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-deployment
+      labels:
+        app: nginx
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: nginx
+      template:
+        metadata:
+          labels:
+            app: nginx
+        spec:
+          containers:
+            - name: nginx
+              image: nginx:1.14.2-suffix628
+              ports:
+                - containerPort: 80
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: nginx-deployment2
+      labels:
+        app: nginx
+    spec:
+      replicas: 3
+      selector:
+        matchLabels:
+          app: nginx
+      template:
+        metadata:
+          labels:
+            app: nginx
+        spec:
+          containers:
+            - name: nginx
+              image: nginx:1.14.2-suffix628
+              ports:
+                - containerPort: 80
+`
 )
 
 func createFile(t *testing.T, content, fileName string) *os.File {
@@ -260,4 +424,15 @@ func TestManifestWithNamespace(t *testing.T) {
 			assert.Contains(t, string(updated), newNamespace)
 		})
 	}
+}
+
+func TestImageSuffixUpdate(t *testing.T) {
+	updated, err := WithImageTagUpdate(ioutil.NopCloser(bytes.NewReader([]byte(imageUpdateYaml))), func(tag string) (string, error) {
+		return tag + "-suffix628", nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(
+		t,
+		string(updated),
+		postProcessedImageUpdateYaml)
 }
