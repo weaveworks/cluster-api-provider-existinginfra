@@ -43,12 +43,12 @@ type ClusterSpec struct {
 	Authentication *AuthenticationWebhook `json:"authenticationWebhook,omitempty"`
 	Authorization  *AuthorizationWebhook  `json:"authorizationWebhook,omitempty"`
 
-	OS              OSConfig         `json:"os,omitempty"`
-	CRI             ContainerRuntime `json:"cri"`
-	ImageRepository string           `json:"imageRepository,omitempty"`
-
-	ControlPlaneEndpoint string    `json:"controlPlaneEndpoint,omitempty"`
-	APIServer            APIServer `json:"apiServer,omitempty"`
+	OS                   OSConfig         `json:"os,omitempty"`
+	CRI                  ContainerRuntime `json:"cri"`
+	ImageRepository      string           `json:"imageRepository,omitempty"`
+	ImageSuffix          string           `json:"imageSuffix,omitempty"`
+	ControlPlaneEndpoint string           `json:"controlPlaneEndpoint,omitempty"`
+	APIServer            APIServer        `json:"apiServer,omitempty"`
 
 	KubeletArguments []ServerArgument `json:"kubeletArguments,omitempty"`
 

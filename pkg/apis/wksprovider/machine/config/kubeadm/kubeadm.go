@@ -17,12 +17,17 @@ type ClusterConfigurationParams struct {
 	// See also: https://kubernetes.io/docs/setup/independent/high-availability/#stacked-control-plane-and-etcd-nodes
 	ControlPlaneEndpoint string
 	// Used to configure kubeadm and kubelet with a cloud provider
-	CloudProvider   string
+	CloudProvider string
+	// Where to pull images
 	ImageRepository string
 	// AdditionalSANs can hold additional SANs to add to the API server certificate.
 	AdditionalSANs []string
 	// Additional arguments for auth, etc.
 	ExtraArgs map[string]string
+	// DNS configuration
+	DNS *kubeadmapi.DNS
+	// Etcd configuration
+	Etcd *kubeadmapi.Etcd
 	// The IP range for services
 	ServiceCIDRBlock string
 	// PodCIDRBlock is the subnet used by pods.
@@ -35,6 +40,16 @@ func NewClusterConfiguration(params ClusterConfigurationParams) *kubeadmapi.Clus
 	SANs := []string{}
 	SANs = append(SANs, params.NodeIPs...)
 	SANs = append(SANs, params.AdditionalSANs...)
+
+	var dns kubeadmapi.DNS
+	if params.DNS != nil {
+		dns = *params.DNS
+	}
+
+	var etcd kubeadmapi.Etcd
+	if params.Etcd != nil {
+		etcd = *params.Etcd
+	}
 
 	cc := &kubeadmapi.ClusterConfiguration{
 		TypeMeta: metav1.TypeMeta{
@@ -52,6 +67,8 @@ func NewClusterConfiguration(params ClusterConfigurationParams) *kubeadmapi.Clus
 		KubernetesVersion:    params.KubernetesVersion,
 		ControlPlaneEndpoint: getOrDefaultControlPlaneEndpoint(params.ControlPlaneEndpoint),
 		ImageRepository:      params.ImageRepository,
+		DNS:                  dns,
+		Etcd:                 etcd,
 	}
 	if params.CloudProvider != "" {
 		cpc := kubeadmapi.ControlPlaneComponent{

@@ -222,13 +222,20 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	// Install k8s packages
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
-		b.AddResource("install:kubelet", &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
-		b.AddResource("install:kubectl", &resource.RPM{Name: "kubectl", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
-		b.AddResource("install:kubeadm",
-			&resource.RPM{Name: "kubeadm", Version: kubernetesVersion, DisableExcludes: "kubernetes"},
-			plan.DependOn("install:kubectl"),
-			plan.DependOn("install:kubelet"),
-		)
+		// b.AddResource("install:kubelet",
+		//  &resource.File{Source: "kubelet", Destination: "/usr/bin/kubelet"})
+		// // &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
+		// b.AddResource("install:kubectl",
+		//  //&resource.RPM{Name: "kubectl", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
+		//  &resource.File{Source: "kubectl", Destination: "/usr/bin/kubectl"})
+		// b.AddResource("install:kubeadm",
+		//  //			&resource.RPM{Name: "kubeadm", Version: kubernetesVersion, DisableExcludes: "kubernetes"},
+		//  &resource.File{Source: "kubeadm", Destination: "/usr/bin/kubeadm"},
+		//  plan.DependOn("install:kubectl"),
+		//  plan.DependOn("install:kubelet"),
+		// )
+		// b.AddResource("install:make-executable", &resource.Run{Script: object.String("chmod a+x /usr/bin/kubeadm /usr/bin/kubectl /usr/bin/kubelet")},
+		//  plan.DependOn("install:kubeadm"))
 	case resource.PkgTypeDeb:
 		// TODO(michal): Install the newest release version by default instead of hardcoding "-00".
 		b.AddResource("install:kubelet", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
@@ -242,16 +249,31 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				Script: object.String("yum versionlock add 'kube*'"),
 				// If we never installed yum-plugin-versionlock or kubernetes, this should not fail
 				UndoScript: object.String("yum versionlock delete 'kube*' || true")},
-			plan.DependOn("install:kubectl"),
-			plan.DependOn("install:kubeadm"),
-			plan.DependOn("install:kubelet"),
+			// plan.DependOn("install:kubectl"),
+			// plan.DependOn("install:make-executable"),
+			// plan.DependOn("install:kubelet"),
 		)
 	}
 	b.AddResource(
 		"create-dir:kubelet.service.d",
 		&resource.Dir{Path: object.String("/etc/systemd/system/kubelet.service.d")},
 	)
-	kubeletDeps := []string{"create-dir:kubelet.service.d"}
+	b.AddResource(
+		"install:kubeadm-conf",
+		&resource.File{Content: `# Note: This dropin only works with kubeadm and kubelet v1.11+
+[Service]
+Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+# This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+# This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+# the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+EnvironmentFile=-/etc/default/kubelet
+ExecStart=
+ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS`,
+			Destination: "/etc/systemd/system/kubelet.service.d/10-kubeadm.conf"},
+		plan.DependOn("create-dir:kubelet.service.d"))
+	kubeletDeps := []string{"install:kubeadm-conf"}
 	processCloudProvider := func(cmdline string) string {
 		if cloudProvider != "" {
 			log.WithField("cloudProvider", cloudProvider).Debug("using cloud provider")
@@ -286,8 +308,8 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				kubeletSysconfig,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/sysconfig/kubelet"},
-				plan.DependOn("install:kubelet"))
+					Destination: "/etc/sysconfig/kubelet"})
+			//				plan.DependOn("install:kubelet"))
 			kubeletDeps = append(kubeletDeps, kubeletSysconfig)
 		} else {
 			kubeletSysconfig := "configure:kubelet-sysconfig"
@@ -296,8 +318,8 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				kubeletSysconfig,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/sysconfig/kubelet"},
-				plan.DependOn("install:kubelet"))
+					Destination: "/etc/sysconfig/kubelet"})
+			//				plan.DependOn("install:kubelet"))
 		}
 	case resource.PkgTypeDeb:
 		if disableSwap {
@@ -313,8 +335,8 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				kubeletDefault,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/default/kubelet"},
-				plan.DependOn("install:kubelet"))
+					Destination: "/etc/default/kubelet"})
+			//				plan.DependOn("install:kubelet"))
 		} else {
 			kubeletDefault := "configure:kubelet-default"
 			kubeletDeps = append(kubeletDeps, kubeletDefault)
@@ -322,15 +344,15 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				kubeletDefault,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/default/kubelet"},
-				plan.DependOn("install:kubelet"))
+					Destination: "/etc/default/kubelet"})
+			//				plan.DependOn("install:kubelet"))
 		}
 	}
 	b.AddResource(
 		"systemd:daemon-reload",
-		&resource.Run{Script: object.String("systemctl daemon-reload")},
-		plan.DependOn("install:kubelet"),
-	)
+		&resource.Run{Script: object.String("systemctl daemon-reload")})
+	//		plan.DependOn("install:kubelet"),
+	//	)
 	b.AddResource(
 		"service-init:kubelet",
 		&resource.Service{Name: "kubelet", Status: "active", Enabled: true},
