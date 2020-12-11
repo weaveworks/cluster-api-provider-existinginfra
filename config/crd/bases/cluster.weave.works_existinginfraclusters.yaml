@@ -125,6 +125,8 @@ spec:
               type: string
             imageRepository:
               type: string
+            imageSuffix:
+              type: string
             kubeletArguments:
               items:
                 properties:

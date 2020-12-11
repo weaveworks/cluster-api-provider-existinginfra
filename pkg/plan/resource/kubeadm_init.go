@@ -90,6 +90,10 @@ func (ki *KubeadmInit) State() plan.State {
 	return ToState(ki)
 }
 
+func isEKSD(repo string) bool {
+	return repo == "public.ecr.aws/eks-distro/kubernetes"
+}
+
 // Apply implements plan.Resource.
 // TODO: find a way to make this idempotent.
 // TODO: should such a resource be split into smaller resources?
@@ -110,8 +114,34 @@ func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.
 	if namespace == "" {
 		namespace = manifest.DefaultNamespace
 	}
+
+	ki.ImageRepository = "public.ecr.aws/eks-distro/kubernetes" // XXXXXXXXXXXXXXXXXX
+	var dns *kubeadmapi.DNS = nil
+	var etcd *kubeadmapi.Etcd = nil
+	if isEKSD(ki.ImageRepository) {
+		dns = &kubeadmapi.DNS{
+			Type: "",
+			ImageMeta: kubeadmapi.ImageMeta{
+				ImageRepository: "public.ecr.aws/eks-distro/coredns",
+				ImageTag:        "v1.7.0-eks-1-18-1",
+			},
+		}
+		etcd = &kubeadmapi.Etcd{
+			Local: &kubeadmapi.LocalEtcd{
+				ImageMeta: kubeadmapi.ImageMeta{
+					ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
+					ImageTag:        "v3.4.14-eks-1-18-1",
+				},
+				DataDir:        "",
+				ExtraArgs:      nil,
+				ServerCertSANs: nil,
+				PeerCertSANs:   nil,
+			},
+		}
+	}
+
 	clusterConfig, err := yaml.Marshal(kubeadm.NewClusterConfiguration(kubeadm.ClusterConfigurationParams{
-		KubernetesVersion:    ki.KubernetesVersion,
+		KubernetesVersion:    ki.KubernetesVersion + "-eks-1-18-1",
 		NodeIPs:              []string{ki.PublicIP, ki.PrivateIP},
 		ControlPlaneEndpoint: ki.ControlPlaneEndpoint,
 		CloudProvider:        ki.CloudProvider,
@@ -120,6 +150,8 @@ func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.
 		ExtraArgs:            ki.ExtraAPIServerArgs,
 		ServiceCIDRBlock:     ki.ServiceCIDRBlock,
 		PodCIDRBlock:         ki.PodCIDRBlock,
+		DNS:                  dns,
+		Etcd:                 etcd,
 	}))
 	if err != nil {
 		return false, errors.Wrap(err, "failed to serialize kubeadm's ClusterConfiguration object")
@@ -321,9 +353,15 @@ func buildKubeadmInitPlan(path string, ignorePreflightErrors string, useIPTables
 		&Run{Script: object.String("kubeadm reset --force")},
 		plan.DependOn("kubeadm:config:upgrade"),
 	).AddResource(
+		"kubeadm:echo1", &Run{Script: object.String("echo echo1 && ls -la /etc/kubernetes/manifests")},
+		plan.DependOn("kubeadm:reset"),
+	).AddResource(
 		"kubeadm:config:images",
 		&Run{Script: plan.ParamString("kubeadm config images pull --config=%s", &path)},
-		plan.DependOn("kubeadm:reset"),
+		plan.DependOn("kubeadm:echo1"),
+	).AddResource(
+		"kubeadm:echo2", &Run{Script: object.String("echo echo2 && ls -la /etc/kubernetes/manifests")},
+		plan.DependOn("kubeadm:config:images"),
 	).AddResource(
 		"kubeadm:run-init",
 		// N.B.: --experimental-upload-certs encrypts & uploads
@@ -333,7 +371,7 @@ func buildKubeadmInitPlan(path string, ignorePreflightErrors string, useIPTables
 			UndoResource: buildKubeadmRunInitUndoPlan(),
 			Output:       output,
 		},
-		plan.DependOn("kubeadm:config:images"),
+		plan.DependOn("kubeadm:echo2"),
 	)
 
 	var homedir string

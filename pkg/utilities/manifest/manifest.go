@@ -19,6 +19,7 @@ const (
 
 var DefaultAddonNamespaces = map[string]string{"weave-net": "kube-system"}
 
+// WithNamespace applies a specified namespace to each manifest in a '---' separated list
 func WithNamespace(rc io.ReadCloser, namespace string) ([]byte, error) {
 	// Create a FrameReader and FrameWriter, using YAML document separators
 	// The FrameWriter will write into buf
@@ -87,6 +88,7 @@ func WithNamespace(rc io.ReadCloser, namespace string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// WithImageTagUpdate updates all image tags in containers within a top-level resource description or list of descriptions
 func WithImageTagUpdate(rc io.ReadCloser, updater func(string) (string, error)) ([]byte, error) {
 	// Create a FrameReader and FrameWriter, using YAML document separators
 	// The FrameWriter will write into buf
