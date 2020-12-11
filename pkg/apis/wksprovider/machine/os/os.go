@@ -285,6 +285,20 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 			Namespace:             object.String(params.Namespace),
 			NodeName:              cfg.HostnameOverride,
 			ExtraAPIServerArgs:    apiServerArgs,
+			AssetDescriptions: map[string]resource.AssetDescription{
+				"DNS": {
+					ImageRepository: "public.ecr.aws/eks-distro/coredns",
+					ImageTag:        "v1.7.0-eks-1-18-1",
+				},
+				"Etcd": {
+					ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
+					ImageTag:        "v3.4.14-eks-1-18-1",
+				},
+				"Kubernetes": {
+					ImageRepository: "public.ecr.aws/eks-distro/kubernetes",
+					ImageTag:        "-eks-1-18-1",
+				},
+			},
 			// kubeadm currently accepts a single subnet for services and pods
 			// ref: https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1#Networking
 			// this should be ensured in the validation step in pkg.specs.validation.validateCIDRBlocks()
