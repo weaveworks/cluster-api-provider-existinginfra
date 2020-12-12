@@ -357,6 +357,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		AdditionalSANs:       sp.ClusterSpec.APIServer.AdditionalSANs,
 		Namespace:            ns,
 		AddonNamespaces:      map[string]string{},
+		Flavor:               eic.Spec.Flavor,
 	}); err != nil {
 		return gerrors.Wrapf(err, "failed to set up seed node (%s)", seedNodeIP)
 	}

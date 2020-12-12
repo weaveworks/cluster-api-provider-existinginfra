@@ -55,7 +55,14 @@ type ClusterSpec struct {
 
 	Addons []Addon `json:"addons,omitempty"`
 
-	CloudProvider string `json:"cloudProvider,omitempty"`
+	CloudProvider string        `json:"cloudProvider,omitempty"`
+	Flavor        ClusterFlavor `json:"flavor,omitempty"`
+}
+
+// ClusterFlavor is used to define cluster override values and configuration
+type ClusterFlavor struct {
+	Name        string `json:"name"`
+	ManifestURL string `json:"manifestURL"`
 }
 
 // ClusterStatus defines the observed state of ExistingInfraCluster

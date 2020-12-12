@@ -180,6 +180,7 @@ type SeedNodeParams struct {
 	AdditionalSANs       []string
 	AddonNamespaces      map[string]string
 	AssetDescriptions    map[string]kubeadm.AssetDescription
+	Flavor               existinginfrav1.ClusterFlavor
 }
 
 // Validate generally validates this SeedNodeParams struct, e.g. ensures it
@@ -268,7 +269,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 
 	log.Info("Built cri plan")
 
-	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, recipe.BinInstaller(o.PkgType, &params.Flavor))
 	b.AddResource("install:k8s", k8sRes, plan.DependOn("install:cri"))
 
 	log.Info("Built k8s plan")
@@ -826,6 +827,7 @@ type NodeParams struct {
 	ControlPlaneEndpoint     string // used instead of MasterIP if existed
 	AddonNamespaces          map[string]string
 	AssetDescriptions        map[string]kubeadm.AssetDescription
+	Flavor                   existinginfrav1.ClusterFlavor
 }
 
 // Validate generally validates this NodeParams struct, e.g. ensures it
@@ -896,7 +898,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
 
-	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, recipe.BinInstaller(o.PkgType, &params.Flavor))
 	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))
