@@ -14,6 +14,8 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/drone/envsubst"
+	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
@@ -24,6 +26,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/runners/sudo"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/manifest"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
@@ -176,6 +179,7 @@ type SeedNodeParams struct {
 	ControlPlaneEndpoint string
 	AdditionalSANs       []string
 	AddonNamespaces      map[string]string
+	AssetDescriptions    map[string]kubeadm.AssetDescription
 }
 
 // Validate generally validates this SeedNodeParams struct, e.g. ensures it
@@ -210,6 +214,22 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}
+	// Replace w/ info from apply
+	params.AssetDescriptions = map[string]kubeadm.AssetDescription{
+		"DNS": {
+			ImageRepository: "public.ecr.aws/eks-distro/coredns",
+			ImageTag:        "v1.7.0-eks-1-18-1",
+		},
+		"Etcd": {
+			ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
+			ImageTag:        "v3.4.14-eks-1-18-1",
+		},
+		"Kubernetes": {
+			ImageRepository: "public.ecr.aws/eks-distro/kubernetes",
+			ImageTag:        "-eks-1-18-1",
+		},
+	}
+
 	log.Info("Validated params")
 	cfg, err := envcfg.GetEnvSpecificConfig(ctx, o.PkgType, params.Namespace, params.KubeletConfig.CloudProvider, o.Runner)
 	if err != nil {
@@ -285,20 +305,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 			Namespace:             object.String(params.Namespace),
 			NodeName:              cfg.HostnameOverride,
 			ExtraAPIServerArgs:    apiServerArgs,
-			AssetDescriptions: map[string]resource.AssetDescription{
-				"DNS": {
-					ImageRepository: "public.ecr.aws/eks-distro/coredns",
-					ImageTag:        "v1.7.0-eks-1-18-1",
-				},
-				"Etcd": {
-					ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
-					ImageTag:        "v3.4.14-eks-1-18-1",
-				},
-				"Kubernetes": {
-					ImageRepository: "public.ecr.aws/eks-distro/kubernetes",
-					ImageTag:        "-eks-1-18-1",
-				},
-			},
+			AssetDescriptions:     params.AssetDescriptions,
 			// kubeadm currently accepts a single subnet for services and pods
 			// ref: https://godoc.org/k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1#Networking
 			// this should be ensured in the validation step in pkg.specs.validation.validateCIDRBlocks()
@@ -312,19 +319,28 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	// TODO(damien): Add a CNI section in cluster.yaml once we support more than one CNI plugin.
 	// const cni = "weave-net"
 
-	var manifest string
-	fetchRsc := &resource.Run{Script: object.String("kubectl version | base64 | tr -d '\n'"), Output: &manifest}
-	b.AddResource("fetch:cni", fetchRsc, plan.DependOn("kubeadm:init"))
+	if cluster.Spec.CNI == "" { // default to weave net
+		var manifest string
+		fetchRsc := &resource.Run{Script: object.String("kubectl version | base64 | tr -d '\n'"), Output: &manifest}
+		b.AddResource("fetch:cni", fetchRsc, plan.DependOn("kubeadm:init"))
 
-	cniRsc := &resource.KubectlApply{ManifestURL: plan.ParamString("https://cloud.weave.works/k8s/net?k8s-version=%s",
-		&manifest)}
-	if len(params.PodsCIDRBlocks) > 0 && params.PodsCIDRBlocks[0] != "" {
-		cniRsc = &resource.KubectlApply{
-			ManifestURL: plan.ParamString("https://cloud.weave.works/k8s/net?k8s-version=%s&env.IPALLOC_RANGE=%s",
-				&manifest, &params.PodsCIDRBlocks[0])}
+		cniRsc := &resource.KubectlApply{ManifestURL: plan.ParamString("https://cloud.weave.works/k8s/net?k8s-version=%s",
+			&manifest)}
+		if len(params.PodsCIDRBlocks) > 0 && params.PodsCIDRBlocks[0] != "" {
+			cniRsc = &resource.KubectlApply{
+				ManifestURL: plan.ParamString("https://cloud.weave.works/k8s/net?k8s-version=%s&env.IPALLOC_RANGE=%s",
+					&manifest, &params.PodsCIDRBlocks[0])}
+		}
+
+		b.AddResource("install:cni", cniRsc, plan.DependOn("fetch:cni"))
+	} else {
+		instantiated, err := withEnvParams(params, cluster.Spec.CNI)
+		if err != nil {
+			return nil, err
+		}
+		b.AddResource("install:cni", &resource.Run{Script: object.String(instantiated)})
 	}
 
-	b.AddResource("install:cni", cniRsc, plan.DependOn("fetch:cni"))
 	log.Info("Got cni resource")
 
 	// Add resources to apply the cluster API's CRDs so that Kubernetes
@@ -403,6 +419,21 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 
 	cmapRes := &resource.KubectlApply{Manifest: cmapManifest, Filename: object.String("clusterconfigmap")}
 	b.AddResource("kubectl:apply:cluster-config-map", cmapRes, plan.DependOn(dep))
+
+	// Create a config map tracking assets for distribution flavors
+	assetConfigMap, err := CreateAssetConfigMap(&params.ExistingInfraCluster, params.Namespace, params.AssetDescriptions)
+	if err != nil {
+		return nil, err
+	}
+
+	assetConfigMapManifest, err := yaml.Marshal(assetConfigMap)
+	if err != nil {
+		return nil, err
+	}
+
+	acmRes := &resource.KubectlApply{Manifest: assetConfigMapManifest, Filename: object.String("assetconfigmap")}
+	b.AddResource("kubectl:apply:asset-config-map", acmRes, plan.DependOn(dep))
+
 	wksCtlrManifest, err := WksControllerManifest(params.Controller.ImageOverride, params.Namespace)
 	if err != nil {
 		return nil, err
@@ -417,6 +448,31 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	return CreatePlan(b)
 }
 
+func withEnvParams(params SeedNodeParams, script string) (string, error) {
+	paramMap := structs.Map(params)
+	var substErr error = nil
+	instantiated, err := envsubst.Eval(script, func(varName string) string {
+		val, ok := paramMap[varName]
+		if !ok {
+			substErr = fmt.Errorf("Variable not found in params: %s", varName)
+			return ""
+		}
+		strval, ok := val.(string)
+		if !ok {
+			substErr = errors.New("Only string variables allowed in params")
+			return ""
+		}
+		return strval
+	})
+	if substErr != nil {
+		return "", substErr
+	}
+	if err != nil {
+		return "", err
+	}
+	return instantiated, nil
+}
+
 func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace string) *v1.ConfigMap {
 	configMap := &v1.ConfigMap{}
 	configMap.TypeMeta.APIVersion = "v1"
@@ -429,6 +485,25 @@ func CreateClusterConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace
 
 	configMap.Data["spec"] = ""
 	return configMap
+}
+
+func CreateAssetConfigMap(eic *existinginfrav1.ExistingInfraCluster, namespace string, assetDescriptions map[string]kubeadm.AssetDescription) (*v1.ConfigMap, error) {
+	configMap := &v1.ConfigMap{}
+	configMap.TypeMeta.APIVersion = "v1"
+	configMap.TypeMeta.Kind = "ConfigMap"
+	configMap.Name = eic.Name + "-assets"
+	configMap.Namespace = namespace
+	if configMap.Data == nil {
+		configMap.Data = map[string]string{}
+	}
+
+	json, err := json.Marshal(assetDescriptions)
+	if err != nil {
+		return nil, err
+	}
+
+	configMap.Data["assets"] = string(json)
+	return configMap, nil
 }
 
 func addSealedSecretWaitIfNecessary(b *plan.Builder, key, cert string) string {
@@ -743,6 +818,7 @@ type NodeParams struct {
 	KubeletConfig            config.KubeletConfig
 	KubernetesVersion        string
 	CRI                      existinginfrav1.ContainerRuntime
+	CNI                      string
 	ConfigFileSpecs          []existinginfrav1.FileSpec
 	ProviderConfigMaps       map[string]*v1.ConfigMap
 	AuthConfigMap            *v1.ConfigMap
@@ -750,6 +826,7 @@ type NodeParams struct {
 	Namespace                string
 	ControlPlaneEndpoint     string // used instead of MasterIP if existed
 	AddonNamespaces          map[string]string
+	AssetDescriptions        map[string]kubeadm.AssetDescription
 }
 
 // Validate generally validates this NodeParams struct, e.g. ensures it
@@ -820,12 +897,19 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
 
-	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	// Allow for version override from distribution flavor
+	kubernetesVersion := params.KubernetesVersion
+	assetDesc, found := params.AssetDescriptions["Kubernetes"]
+	if found && assetDesc.ImageTag != "" {
+		kubernetesVersion = "v" + kubernetesVersion + assetDesc.ImageTag
+	}
+
+	instK8sRsrc := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
 	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))
 
-	kadmPJRsrc := recipe.BuildKubeadmPrejoinPlan(params.KubernetesVersion, cfg.UseIPTables)
+	kadmPJRsrc := recipe.BuildKubeadmPrejoinPlan(kubernetesVersion, cfg.UseIPTables)
 	b.AddResource("kubeadm:prejoin", kadmPJRsrc, plan.DependOn("install:k8s"))
 
 	log.Info("Built join plan")
@@ -840,7 +924,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 		DiscoveryTokenCaCertHash: params.DiscoveryTokenCaCertHash,
 		CertificateKey:           params.CertificateKey,
 		IgnorePreflightErrors:    cfg.IgnorePreflightErrors,
-		KubernetesVersion:        params.KubernetesVersion,
+		KubernetesVersion:        kubernetesVersion,
 	}
 	b.AddResource("kubeadm:join", kadmJoinRsrc, plan.DependOn("kubeadm:prejoin"))
 	return CreatePlan(b)

@@ -45,6 +45,7 @@ type ClusterSpec struct {
 
 	OS                   OSConfig         `json:"os,omitempty"`
 	CRI                  ContainerRuntime `json:"cri"`
+	CNI                  string           `json:"cni"`
 	ImageRepository      string           `json:"imageRepository,omitempty"`
 	ImageSuffix          string           `json:"imageSuffix,omitempty"`
 	ControlPlaneEndpoint string           `json:"controlPlaneEndpoint,omitempty"`
