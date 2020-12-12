@@ -102,6 +102,8 @@ spec:
               type: object
             cloudProvider:
               type: string
+            cni:
+              type: string
             controlPlaneEndpoint:
               type: string
             controlPlaneMachineCount:
@@ -175,6 +177,7 @@ spec:
             workloadCluster:
               type: boolean
           required:
+          - cni
           - cri
           - user
           type: object

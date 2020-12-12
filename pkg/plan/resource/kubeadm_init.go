@@ -73,7 +73,7 @@ type KubeadmInit struct {
 	ImageRepository string `structs:"imageRepository"`
 	// AssetDescriptions specifies the image repository and image tag for each potentially overridden
 	// asset (currently, DNS, Etcd, and Kubernetes)
-	AssetDescriptions map[string]AssetDescription
+	AssetDescriptions map[string]kubeadmutil.AssetDescription
 	// AdditionalSANs can hold additional SANs to add to the API server certificate.
 	AdditionalSANs []string
 	// The namespace in which to init kubeadm
@@ -84,12 +84,6 @@ type KubeadmInit struct {
 	ServiceCIDRBlock string
 	// PodCIDRBlock is the subnet used by pods.
 	PodCIDRBlock string
-}
-
-// Tells which images to retrieve and where to retrieve them for DNS, Etcd, and Kubernetes
-type AssetDescription struct {
-	ImageRepository string `json:"imageRepository,omitempty"`
-	ImageTag        string `json:"imageTag,omitempty"`
 }
 
 var _ plan.Resource = plan.RegisterResource(&KubeadmInit{})
@@ -380,15 +374,9 @@ func buildKubeadmInitPlan(path string, ignorePreflightErrors string, useIPTables
 		&Run{Script: object.String("kubeadm reset --force")},
 		plan.DependOn("kubeadm:config:upgrade"),
 	).AddResource(
-		"kubeadm:echo1", &Run{Script: object.String("echo echo1 && ls -la /etc/kubernetes/manifests")},
-		plan.DependOn("kubeadm:reset"),
-	).AddResource(
 		"kubeadm:config:images",
 		&Run{Script: plan.ParamString("kubeadm config images pull --config=%s", &path)},
-		plan.DependOn("kubeadm:echo1"),
-	).AddResource(
-		"kubeadm:echo2", &Run{Script: object.String("echo echo2 && ls -la /etc/kubernetes/manifests")},
-		plan.DependOn("kubeadm:config:images"),
+		plan.DependOn("kubeadm:reset"),
 	).AddResource(
 		"kubeadm:run-init",
 		// N.B.: --experimental-upload-certs encrypts & uploads
@@ -398,7 +386,7 @@ func buildKubeadmInitPlan(path string, ignorePreflightErrors string, useIPTables
 			UndoResource: buildKubeadmRunInitUndoPlan(),
 			Output:       output,
 		},
-		plan.DependOn("kubeadm:echo2"),
+		plan.DependOn("kubeadm:config:images"),
 	)
 
 	var homedir string
