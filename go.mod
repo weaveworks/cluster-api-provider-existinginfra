@@ -3,6 +3,7 @@ module github.com/weaveworks/cluster-api-provider-existinginfra
 go 1.13
 
 require (
+	github.com/aws/eks-distro-build-tooling/release v0.0.0-20201211225747-07f05a470de8
 	github.com/bitnami-labs/sealed-secrets v0.12.5
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/cavaliercoder/go-rpm v0.0.0-20200122174316-8cb9fd9c31a8

@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/flavors/eksd"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
@@ -185,28 +186,34 @@ func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime
 }
 
 // BinInstaller creates a function to install binaries based on package type and cluster flavors
-func BinInstaller(pkgType resource.PkgType, f *existinginfrav1.ClusterFlavor) func(string, string) plan.Resource {
+func BinInstaller(pkgType resource.PkgType, f *existinginfrav1.ClusterFlavor) (func(string, string) plan.Resource, error) {
 	if f != nil {
+		log.Debugf("Using flavor %+v", f)
+		e, err := eksd.New(f.ManifestURL)
+		if err != nil {
+			return nil, err
+		}
 		return func(binName, version string) plan.Resource {
 			// TODO (Mark) logic for the architecture
-			// TODO (Mark) pull from actual manifest
-			binURL := "https://distro.eks.amazonaws.com/kubernetes-1-18/releases/1/artifacts/kubernetes/v1.18.9/bin/linux/amd64/kubelet"
-			if binName == "kubectl" {
-				binURL = "https://distro.eks.amazonaws.com/kubernetes-1-18/releases/1/artifacts/kubernetes/v1.18.9/bin/linux/amd64/kubectl"
+			binURL, _, err := e.KubeBinURL(binName)
+			if err != nil {
+				log.Fatalf("%v", err)
+				return nil
 			}
+			// TODO Use the sha256 value to verify the downlaod
 			return &resource.Run{
 				Script:     object.String(fmt.Sprintf("curl -o /bin/%s %s && chmod 755 /bin/%s || true", binName, binURL, binName)),
 				UndoScript: object.String(fmt.Sprintf("rm /bin/%s || true", binName))}
-		}
+		}, nil
 	}
 	if pkgType == resource.PkgTypeDeb {
 		return func(binName, version string) plan.Resource {
 			return &resource.Deb{Name: binName, Suffix: "=" + version + "-00"}
-		}
+		}, nil
 	}
 	return func(binName, version string) plan.Resource {
 		return &resource.RPM{Name: binName, Version: version, DisableExcludes: "kubernetes"}
-	}
+	}, nil
 
 }
 
