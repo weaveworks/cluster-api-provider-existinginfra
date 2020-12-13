@@ -19,6 +19,12 @@ const (
 	certificateKey = "certificate-key"
 )
 
+// AssetDescription provides image override properties when using cluster flavors
+type AssetDescription struct {
+	ImageRepository string `json:"iamgeRepository,omitempty"`
+	ImageTag        string `json:"iamgeTag,omitempty"`
+}
+
 // ExtractJoinCmd goes through the provided kubeadm init standard output and
 // extracts the kubeadm join command printed.
 func ExtractJoinCmd(stdOut string) (string, error) {
