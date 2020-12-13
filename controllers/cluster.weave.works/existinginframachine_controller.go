@@ -791,6 +791,7 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 		Namespace:            namespace,
 		ControlPlaneEndpoint: provider.Spec.ControlPlaneEndpoint,
 		AssetDescriptions:    assetDescriptions,
+		Flavor:               provider.Spec.Flavor,
 	})
 	if err != nil {
 		return nil, gerrors.Wrapf(err, "failed to create machine plan for %s", machine.Name)

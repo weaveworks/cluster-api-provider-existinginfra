@@ -268,8 +268,11 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	b.AddResource("install:cri", criRes, plan.DependOn("install:config"))
 
 	log.Info("Built cri plan")
-
-	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, recipe.BinInstaller(o.PkgType, &params.Flavor))
+	binInstaller, err := recipe.BinInstaller(o.PkgType, &params.Flavor)
+	if err != nil {
+		return nil, err
+	}
+	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller)
 	b.AddResource("install:k8s", k8sRes, plan.DependOn("install:cri"))
 
 	log.Info("Built k8s plan")
@@ -898,7 +901,11 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
 
-	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, recipe.BinInstaller(o.PkgType, &params.Flavor))
+	binInstaller, err := recipe.BinInstaller(o.PkgType, &params.Flavor)
+	if err != nil {
+		return nil, err
+	}
+	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller)
 	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))
@@ -1057,6 +1064,7 @@ func seedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams, provid
 		ProviderConfigMaps:   providerConfigMaps,
 		Namespace:            params.Namespace,
 		ControlPlaneEndpoint: providerSpec.ControlPlaneEndpoint,
+		Flavor:               params.Flavor,
 	}
 	if params.AuthInfo != nil {
 		nodeParams.AuthConfigMap = params.AuthInfo.AuthConfigMap
