@@ -186,16 +186,12 @@ func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime
 }
 
 // BinInstaller creates a function to install binaries based on package type and cluster flavors
-func BinInstaller(pkgType resource.PkgType, f *existinginfrav1.ClusterFlavor) (func(string, string) plan.Resource, error) {
+func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) plan.Resource, error) {
 	if f != nil {
 		log.Debugf("Using flavor %+v", f)
-		e, err := eksd.New(f.ManifestURL)
-		if err != nil {
-			return nil, err
-		}
 		return func(binName, version string) plan.Resource {
 			// TODO (Mark) logic for the architecture
-			binURL, _, err := e.KubeBinURL(binName)
+			binURL, _, err := f.KubeBinURL(binName)
 			if err != nil {
 				log.Fatalf("%v", err)
 				return nil

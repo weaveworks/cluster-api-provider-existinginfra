@@ -17,6 +17,11 @@ type EKSD struct {
 	release    *distrov1alpha1.Release
 }
 
+const (
+	// Flavor name of the eks-d flavor
+	Flavor string = "eks-d"
+)
+
 // New create an instance of EKSD with the manifest from the URL argument
 func New(eksdURL string) (*EKSD, error) {
 	m, err := readRelease(eksdURL)

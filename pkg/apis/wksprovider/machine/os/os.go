@@ -21,6 +21,7 @@ import (
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/config"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/crds"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/flavors/eksd"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
@@ -216,19 +217,27 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 		return nil, err
 	}
 	// Replace w/ info from apply
-	params.AssetDescriptions = map[string]kubeadm.AssetDescription{
-		"DNS": {
-			ImageRepository: "public.ecr.aws/eks-distro/coredns",
-			ImageTag:        "v1.7.0-eks-1-18-1",
-		},
-		"Etcd": {
-			ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
-			ImageTag:        "v3.4.14-eks-1-18-1",
-		},
-		"Kubernetes": {
-			ImageRepository: "public.ecr.aws/eks-distro/kubernetes",
-			ImageTag:        "-eks-1-18-1",
-		},
+	var flavor *eksd.EKSD = nil
+	var err error
+	if params.Flavor.Name == eksd.Flavor {
+		flavor, err = eksd.New(params.Flavor.ManifestURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if flavor != nil {
+		params.AssetDescriptions = map[string]kubeadm.AssetDescription{}
+		for _, n := range []string{"Coredns", "Etcd", "Kubernetes"} {
+			repo, tag, err := flavor.ImageInfo(n)
+			if err != nil {
+				log.Warnf("didn't find inage info for %s, %v", n, err)
+				continue
+			}
+			params.AssetDescriptions[n] = kubeadm.AssetDescription{
+				ImageRepository: repo,
+				ImageTag:        tag,
+			}
+		}
 	}
 
 	log.Info("Validated params")
@@ -268,7 +277,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	b.AddResource("install:cri", criRes, plan.DependOn("install:config"))
 
 	log.Info("Built cri plan")
-	binInstaller, err := recipe.BinInstaller(o.PkgType, &params.Flavor)
+	binInstaller, err := recipe.BinInstaller(o.PkgType, flavor)
 	if err != nil {
 		return nil, err
 	}
@@ -902,7 +911,15 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
 
-	binInstaller, err := recipe.BinInstaller(o.PkgType, &params.Flavor)
+	var flavor *eksd.EKSD = nil
+	if params.Flavor.Name == eksd.Flavor {
+		flavor, err = eksd.New(params.Flavor.ManifestURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	binInstaller, err := recipe.BinInstaller(o.PkgType, flavor)
 	if err != nil {
 		return nil, err
 	}

@@ -126,7 +126,7 @@ func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.
 	}
 
 	var dns *kubeadmapi.DNS = nil
-	dnsAD, found := ki.AssetDescriptions["DNS"]
+	dnsAD, found := ki.AssetDescriptions["Coredns"]
 	if found {
 		dns = &kubeadmapi.DNS{
 			Type: "",

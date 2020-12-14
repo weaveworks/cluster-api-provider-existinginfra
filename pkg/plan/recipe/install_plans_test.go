@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/flavors/eksd"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 )
@@ -33,8 +33,10 @@ func TestBinInstallerPkgResouce(t *testing.T) {
 	}
 }
 func TestBinInstallerFlavor(t *testing.T) {
-	cf := existinginfrav1.ClusterFlavor{Name: "eks-d", ManifestURL: "https://distro.eks.amazonaws.com/kubernetes-1-18/kubernetes-1-18-eks-1.yaml"}
-	f, err := BinInstaller(resource.PkgTypeRHEL, &cf)
+	cf, err := eksd.New("https://distro.eks.amazonaws.com/kubernetes-1-18/kubernetes-1-18-eks-1.yaml")
+	assert.NoError(t, err)
+
+	f, err := BinInstaller(resource.PkgTypeRHEL, cf)
 	assert.NoError(t, err)
 	assert.NotNil(t, f)
 	res, ok := f("kubelet", "v2.3").(*resource.Run)
