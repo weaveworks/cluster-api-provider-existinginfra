@@ -1196,7 +1196,7 @@ func (a *ExistingInfraMachineReconciler) getControllerNode(ctx context.Context) 
 			return node, nil
 		}
 	}
-	return nil, errors.New("Could not find controller node")
+	return nil, errors.New("could not find controller node")
 }
 
 func (a *ExistingInfraMachineReconciler) isControllerNode(ctx context.Context, node *corev1.Node) (bool, error) {
