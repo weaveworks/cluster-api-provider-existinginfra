@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/flavors/eksd"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
@@ -184,10 +185,37 @@ func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime
 	return &p
 }
 
-// BuildK8SPlan creates a plan for running kubernetes on a node
-func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstalled, setSELinuxPermissive, disableSwap, lockYUMPkgs bool, pkgType resource.PkgType, cloudProvider string, extraArgs map[string]string) plan.Resource {
-	b := plan.NewBuilder()
+// BinInstaller creates a function to install binaries based on package type and cluster flavors
+func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) plan.Resource, error) {
+	if f != nil {
+		log.Debugf("Using flavor %+v", f)
+		return func(binName, version string) plan.Resource {
+			// TODO (Mark) logic for the architecture
+			binURL, _, err := f.KubeBinURL(binName)
+			if err != nil {
+				log.Fatalf("%v", err)
+				return nil
+			}
+			// TODO Use the sha256 value to verify the downlaod
+			return &resource.Run{
+				Script:     object.String(fmt.Sprintf("curl -o /bin/%s %s && chmod 755 /bin/%s", binName, binURL, binName)),
+				UndoScript: object.String(fmt.Sprintf("rm /bin/%s || true", binName))}
+		}, nil
+	}
+	if pkgType == resource.PkgTypeDeb {
+		return func(binName, version string) plan.Resource {
+			return &resource.Deb{Name: binName, Suffix: "=" + version + "-00"}
+		}, nil
+	}
+	return func(binName, version string) plan.Resource {
+		return &resource.RPM{Name: binName, Version: version, DisableExcludes: "kubernetes"}
+	}, nil
 
+}
+
+// BuildK8SPlan creates a plan for running kubernetes on a node
+func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstalled, setSELinuxPermissive, disableSwap, lockYUMPkgs bool, pkgType resource.PkgType, cloudProvider string, extraArgs map[string]string, binInstaller func(string, string) plan.Resource) plan.Resource {
+	b := plan.NewBuilder()
 	// Kubernetes repos
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
@@ -222,25 +250,19 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	// Install k8s packages
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
-		// b.AddResource("install:kubelet",
-		//  &resource.File{Source: "kubelet", Destination: "/usr/bin/kubelet"})
-		// // &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
-		// b.AddResource("install:kubectl",
-		//  //&resource.RPM{Name: "kubectl", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
-		//  &resource.File{Source: "kubectl", Destination: "/usr/bin/kubectl"})
-		// b.AddResource("install:kubeadm",
-		//  //			&resource.RPM{Name: "kubeadm", Version: kubernetesVersion, DisableExcludes: "kubernetes"},
-		//  &resource.File{Source: "kubeadm", Destination: "/usr/bin/kubeadm"},
-		//  plan.DependOn("install:kubectl"),
-		//  plan.DependOn("install:kubelet"),
-		// )
-		// b.AddResource("install:make-executable", &resource.Run{Script: object.String("chmod a+x /usr/bin/kubeadm /usr/bin/kubectl /usr/bin/kubelet")},
-		//  plan.DependOn("install:kubeadm"))
+		b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
+		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion))
+		b.AddResource("install:kubeadm",
+			binInstaller("kubeadm", kubernetesVersion),
+			plan.DependOn("install:kubectl"),
+			plan.DependOn("install:kubelet"),
+		)
 	case resource.PkgTypeDeb:
 		// TODO(michal): Install the newest release version by default instead of hardcoding "-00".
-		b.AddResource("install:kubelet", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
-		b.AddResource("install:kubeadm", &resource.Deb{Name: "kubeadm", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
-		b.AddResource("install:kubectl", &resource.Deb{Name: "kubectl", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
+		b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+		b.AddResource("install:kubeadm", binInstaller("kubeadm", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+
 	}
 	if lockYUMPkgs {
 		b.AddResource(

@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "eks-d-e105ba21"
+const ImageTag = "k8s-pkg-overrides-f0b60cc0-WIP"

@@ -791,6 +791,7 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 		Namespace:            namespace,
 		ControlPlaneEndpoint: provider.Spec.ControlPlaneEndpoint,
 		AssetDescriptions:    assetDescriptions,
+		Flavor:               provider.Spec.Flavor,
 	})
 	if err != nil {
 		return nil, gerrors.Wrapf(err, "failed to create machine plan for %s", machine.Name)
@@ -1195,7 +1196,7 @@ func (a *ExistingInfraMachineReconciler) getControllerNode(ctx context.Context) 
 			return node, nil
 		}
 	}
-	return nil, errors.New("Could not find controller node")
+	return nil, errors.New("could not find controller node")
 }
 
 func (a *ExistingInfraMachineReconciler) isControllerNode(ctx context.Context, node *corev1.Node) (bool, error) {

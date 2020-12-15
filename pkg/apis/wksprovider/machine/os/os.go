@@ -21,6 +21,7 @@ import (
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/config"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/apis/wksprovider/machine/crds"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/flavors/eksd"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/recipe"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
@@ -180,6 +181,7 @@ type SeedNodeParams struct {
 	AdditionalSANs       []string
 	AddonNamespaces      map[string]string
 	AssetDescriptions    map[string]kubeadm.AssetDescription
+	Flavor               existinginfrav1.ClusterFlavor
 }
 
 // Validate generally validates this SeedNodeParams struct, e.g. ensures it
@@ -215,19 +217,27 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 		return nil, err
 	}
 	// Replace w/ info from apply
-	params.AssetDescriptions = map[string]kubeadm.AssetDescription{
-		"DNS": {
-			ImageRepository: "public.ecr.aws/eks-distro/coredns",
-			ImageTag:        "v1.7.0-eks-1-18-1",
-		},
-		"Etcd": {
-			ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
-			ImageTag:        "v3.4.14-eks-1-18-1",
-		},
-		"Kubernetes": {
-			ImageRepository: "public.ecr.aws/eks-distro/kubernetes",
-			ImageTag:        "-eks-1-18-1",
-		},
+	var flavor *eksd.EKSD = nil
+	var err error
+	if params.Flavor.Name == eksd.Flavor {
+		flavor, err = eksd.New(params.Flavor.ManifestURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if flavor != nil {
+		params.AssetDescriptions = map[string]kubeadm.AssetDescription{}
+		for _, name := range []string{"DNS", "Etcd", "Kubernetes"} {
+			repo, tag, err := flavor.ImageInfo(name)
+			if err != nil {
+				log.Warnf("didn't find image info for %s, %v", name, err)
+				continue
+			}
+			params.AssetDescriptions[name] = kubeadm.AssetDescription{
+				ImageRepository: repo,
+				ImageTag:        tag,
+			}
+		}
 	}
 
 	log.Info("Validated params")
@@ -267,8 +277,11 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	b.AddResource("install:cri", criRes, plan.DependOn("install:config"))
 
 	log.Info("Built cri plan")
-
-	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	binInstaller, err := recipe.BinInstaller(o.PkgType, flavor)
+	if err != nil {
+		return nil, err
+	}
+	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller)
 	b.AddResource("install:k8s", k8sRes, plan.DependOn("install:cri"))
 
 	log.Info("Built k8s plan")
@@ -826,6 +839,7 @@ type NodeParams struct {
 	ControlPlaneEndpoint     string // used instead of MasterIP if existed
 	AddonNamespaces          map[string]string
 	AssetDescriptions        map[string]kubeadm.AssetDescription
+	Flavor                   existinginfrav1.ClusterFlavor
 }
 
 // Validate generally validates this NodeParams struct, e.g. ensures it
@@ -896,7 +910,19 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
 
-	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	var flavor *eksd.EKSD = nil
+	if params.Flavor.Name == eksd.Flavor {
+		flavor, err = eksd.New(params.Flavor.ManifestURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	binInstaller, err := recipe.BinInstaller(o.PkgType, flavor)
+	if err != nil {
+		return nil, err
+	}
+	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller)
 	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))
@@ -1055,6 +1081,7 @@ func seedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams, provid
 		ProviderConfigMaps:   providerConfigMaps,
 		Namespace:            params.Namespace,
 		ControlPlaneEndpoint: providerSpec.ControlPlaneEndpoint,
+		Flavor:               params.Flavor,
 	}
 	if params.AuthInfo != nil {
 		nodeParams.AuthConfigMap = params.AuthInfo.AuthConfigMap
