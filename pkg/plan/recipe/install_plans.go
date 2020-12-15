@@ -384,7 +384,7 @@ func buildDisableSwapPlan() plan.Resource {
 
 // BuildKubeadmPrejoinPlan creates a sub-plan to prepare for running
 // kubeadm join.
-func BuildKubeadmPrejoinPlan(kubernetesVersion string, useIPTables bool) plan.Resource {
+func BuildKubeadmPrejoinPlan(useIPTables bool) plan.Resource {
 	b := plan.NewBuilder()
 	if useIPTables {
 		b.AddResource(

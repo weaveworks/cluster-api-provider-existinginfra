@@ -57,7 +57,6 @@ func (kj *KubeadmJoin) Apply(ctx context.Context, runner plan.Runner, diff plan.
 	if kj.ControlPlaneEndpoint != "" {
 		apiServerEndpoint = fmt.Sprintf("%s:%d", kj.ControlPlaneEndpoint, kj.MasterPort)
 	}
-	kj.KubernetesVersion = "v1.18.9-eks-1-18-1" // XXXXXXXXXXXXXXXXXX
 	kubeadmJoinCmd := kj.kubeadmJoinCmd(apiServerEndpoint)
 	if stdouterr, err := runner.RunCommand(ctx, WithoutProxy(kubeadmJoinCmd), nil); err != nil {
 		log.WithField("stdouterr", stdouterr).Error("failed to join cluster")
