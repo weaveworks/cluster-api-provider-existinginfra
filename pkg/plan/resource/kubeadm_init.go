@@ -73,7 +73,7 @@ type KubeadmInit struct {
 	ImageRepository string `structs:"imageRepository"`
 	// AssetDescriptions specifies the image repository and image tag for each potentially overridden
 	// asset (currently, DNS, Etcd, and Kubernetes)
-	AssetDescriptions map[string]kubeadmutil.AssetDescription
+	AssetDescriptions map[string]kubeadmutil.AssetDescription `structs:"assetDescriptions"`
 	// AdditionalSANs can hold additional SANs to add to the API server certificate.
 	AdditionalSANs []string
 	// The namespace in which to init kubeadm

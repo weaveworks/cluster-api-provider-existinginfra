@@ -175,7 +175,7 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		contextLog.Errorf("failed to update machine: %v", err)
 	}
 	if reschedule {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return ctrl.Result{}, err
 }
@@ -767,12 +767,7 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 		return nil, err
 	}
 
-	// Allow for version override from distribution flavor
 	kubernetesVersion := machineutil.GetKubernetesVersion(machine)
-	assetDesc, found := assetDescriptions["Kubernetes"]
-	if found && assetDesc.ImageTag != "" {
-		kubernetesVersion = "v" + kubernetesVersion + assetDesc.ImageTag
-	}
 
 	plan, err := installer.CreateNodeSetupPlan(ctx, os.NodeParams{
 		IsMaster:                 machine.Labels["set"] == "master",
@@ -1302,15 +1297,18 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	eic := &existinginfrav1.ExistingInfraCluster{}
 	err := m.reconciler.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, eic)
 	if err != nil {
+		log.Errorf("Failed to retrieve cluster")
 		return nil
 	}
 	cmap, err := m.reconciler.getClusterConfigMap(ctx, eic)
 	if err != nil {
+		log.Errorf("Failed to retrieve cluster config map")
 		return nil
 	}
 
 	specBytes, err := json.Marshal(eic.Spec)
 	if err != nil {
+		log.Errorf("Failed to marshal cluster spec")
 		return nil
 	}
 	hash := sha256.Sum256(specBytes)
@@ -1329,11 +1327,13 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 			return nil
 		}
 
+		log.Info("Initial cluster update -- no need to reconcile machines")
 		return nil
 	}
 
 	existingSpecHash := cmap.Data["spec"]
 	if specByteHash == existingSpecHash {
+		log.Errorf("Cluster is unchanged -- no need to reconcile machines")
 		return nil
 	}
 

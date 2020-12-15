@@ -338,7 +338,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 		if err != nil {
 			return nil, err
 		}
-		b.AddResource("install:cni", &resource.Run{Script: object.String(instantiated)})
+		b.AddResource("install:cni", &resource.Run{Script: object.String(instantiated)}, plan.DependOn("kubeadm:init"))
 	}
 
 	log.Info("Got cni resource")
@@ -896,19 +896,12 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	b.AddResource("install.cri", instCriRsrc, plan.DependOn("install:config"))
 	log.Info("Built cri plan")
 
-	// Allow for version override from distribution flavor
-	kubernetesVersion := params.KubernetesVersion
-	assetDesc, found := params.AssetDescriptions["Kubernetes"]
-	if found && assetDesc.ImageTag != "" {
-		kubernetesVersion = "v" + kubernetesVersion + assetDesc.ImageTag
-	}
-
-	instK8sRsrc := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
+	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments)
 	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))
 
-	kadmPJRsrc := recipe.BuildKubeadmPrejoinPlan(kubernetesVersion, cfg.UseIPTables)
+	kadmPJRsrc := recipe.BuildKubeadmPrejoinPlan(cfg.UseIPTables)
 	b.AddResource("kubeadm:prejoin", kadmPJRsrc, plan.DependOn("install:k8s"))
 
 	log.Info("Built join plan")
@@ -923,7 +916,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 		DiscoveryTokenCaCertHash: params.DiscoveryTokenCaCertHash,
 		CertificateKey:           params.CertificateKey,
 		IgnorePreflightErrors:    cfg.IgnorePreflightErrors,
-		KubernetesVersion:        kubernetesVersion,
+		KubernetesVersion:        params.KubernetesVersion,
 	}
 	b.AddResource("kubeadm:join", kadmJoinRsrc, plan.DependOn("kubeadm:prejoin"))
 	return CreatePlan(b)
