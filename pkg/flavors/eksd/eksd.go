@@ -46,7 +46,9 @@ func (e *EKSD) KubeBinURL(binName string) (url string, sha256 string, err error)
 			return a.Archive.URI, a.Archive.SHA256, nil
 		}
 	}
-
+	if binName == "kubeadm" {
+		return overrideKubeadm()
+	}
 	return "", "", fmt.Errorf("binary %s not found in release %v", binName, e.release.Spec)
 }
 
@@ -59,6 +61,9 @@ func (e *EKSD) findComponent(name string) *distrov1alpha1.Component {
 	}
 	return nil
 
+}
+func overrideKubeadm() (string, string, error) {
+	return "https://weaveworks-wkp.s3.amazonaws.com/eks-d/kubeadm", "", nil
 }
 
 // ImageInfo returns the image repo and tag for an asset
