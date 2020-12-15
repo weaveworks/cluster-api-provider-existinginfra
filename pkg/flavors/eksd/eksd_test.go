@@ -18,6 +18,7 @@ func TestImageAndImageTag(t *testing.T) {
 	}{
 		{"etcd", "public.ecr.aws/eks-distro/etcd-io", "v3.4.14-eks-1-18-1", false},
 		{"eTCd", "public.ecr.aws/eks-distro/etcd-io", "v3.4.14-eks-1-18-1", false},
+		{"DNS", "public.ecr.aws/eks-distro/coredns", "v1.7.0-eks-1-18-1", false},
 		{"goober", "", "", true},
 	}
 	for _, test := range tests {

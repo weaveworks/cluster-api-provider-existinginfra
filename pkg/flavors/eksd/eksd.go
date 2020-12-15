@@ -70,6 +70,10 @@ func overrideKubeadm() (string, string, error) {
 func (e *EKSD) ImageInfo(name string) (repo string, tag string, err error) {
 	c := e.findComponent(name)
 	if c == nil {
+		// dns can be under the name coredns
+		if strings.ToLower(name) == "dns" {
+			return e.ImageInfo("coredns")
+		}
 		return "", "", fmt.Errorf("Component %s not found in release %v", name, e.release.Spec)
 	}
 	for _, a := range c.Assets {
@@ -79,7 +83,7 @@ func (e *EKSD) ImageInfo(name string) (repo string, tag string, err error) {
 			return repo, i[1], nil
 		}
 	}
-	return "", "", fmt.Errorf("No image info for %s component inin release %v", name, e.release.Spec)
+	return "", "", fmt.Errorf("No image info for %s component in release %v", name, e.release.Spec)
 
 }
 
