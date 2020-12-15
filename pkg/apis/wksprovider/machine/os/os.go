@@ -227,13 +227,13 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	}
 	if flavor != nil {
 		params.AssetDescriptions = map[string]kubeadm.AssetDescription{}
-		for _, n := range []string{"Coredns", "Etcd", "Kubernetes"} {
-			repo, tag, err := flavor.ImageInfo(n)
+		for _, name := range []string{"DNS", "Etcd", "Kubernetes"} {
+			repo, tag, err := flavor.ImageInfo(name)
 			if err != nil {
-				log.Warnf("didn't find inage info for %s, %v", n, err)
+				log.Warnf("didn't find image info for %s, %v", name, err)
 				continue
 			}
-			params.AssetDescriptions[n] = kubeadm.AssetDescription{
+			params.AssetDescriptions[name] = kubeadm.AssetDescription{
 				ImageRepository: repo,
 				ImageTag:        tag,
 			}
