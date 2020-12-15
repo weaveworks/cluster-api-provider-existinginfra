@@ -55,3 +55,26 @@ func TestKubeBin(t *testing.T) {
 		}
 	}
 }
+
+func TestKubeadmOverride(t *testing.T) {
+	// TODO replace with static text so we aren't relying on this URL
+	e, err := New("https://distro.eks.amazonaws.com/kubernetes-1-18/kubernetes-1-18-eks-1.yaml")
+	assert.NoError(t, err)
+	tests := []struct {
+		name           string
+		expManifestURL string
+		expErr         bool
+	}{
+		{"kubeadm", "https://weaveworks-wkp.s3.amazonaws.com/eks-d/kubeadm", false},
+	}
+	for _, test := range tests {
+		url, _, err := e.KubeBinURL(test.name)
+		if test.expErr {
+			assert.Error(t, err)
+		} else {
+			assert.NotEqual(t, "", url)
+			assert.NoError(t, err)
+		}
+	}
+
+}

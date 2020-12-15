@@ -253,14 +253,14 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 		b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
 		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion))
 		b.AddResource("install:kubeadm",
-			&resource.RPM{Name: "kubeadm", Version: kubernetesVersion, DisableExcludes: "kubernetes"},
+			binInstaller("kubeadm", kubernetesVersion),
 			plan.DependOn("install:kubectl"),
 			plan.DependOn("install:kubelet"),
 		)
 	case resource.PkgTypeDeb:
 		// TODO(michal): Install the newest release version by default instead of hardcoding "-00".
 		b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
-		b.AddResource("install:kubeadm", &resource.Deb{Name: "kubeadm", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
+		b.AddResource("install:kubeadm", binInstaller("kubeadm", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
 		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
 
 	}
