@@ -214,7 +214,7 @@ func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) 
 }
 
 // BuildK8SPlan creates a plan for running kubernetes on a node
-func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstalled, setSELinuxPermissive, disableSwap, lockYUMPkgs bool, pkgType resource.PkgType, cloudProvider string, extraArgs map[string]string, binInstaller func(string, string) plan.Resource) plan.Resource {
+func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstalled, setSELinuxPermissive, disableSwap, lockYUMPkgs bool, pkgType resource.PkgType, cloudProvider string, extraArgs map[string]string, binInstaller func(string, string) plan.Resource, flavor *eksd.EKSD) plan.Resource {
 	b := plan.NewBuilder()
 	// Kubernetes repos
 	switch pkgType {
@@ -250,7 +250,12 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	// Install k8s packages
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
-		b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
+		if flavor != nil {
+			b.AddResource("install:kubelet-package", &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("install:kubelet-package"))
+		} else {
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
+		}
 		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion))
 		b.AddResource("install:kubeadm",
 			binInstaller("kubeadm", kubernetesVersion),
@@ -259,7 +264,12 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 		)
 	case resource.PkgTypeDeb:
 		// TODO(michal): Install the newest release version by default instead of hardcoding "-00".
-		b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+		if flavor != nil {
+			b.AddResource("install:kubelet-package", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("install:kubelet-package"))
+		} else {
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+		}
 		b.AddResource("install:kubeadm", binInstaller("kubeadm", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
 		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
 
@@ -330,8 +340,8 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 				kubeletSysconfig,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/sysconfig/kubelet"})
-			//				plan.DependOn("install:kubelet"))
+					Destination: "/etc/sysconfig/kubelet"},
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 			kubeletDeps = append(kubeletDeps, kubeletSysconfig)
 		} else {
 			kubeletSysconfig := "configure:kubelet-sysconfig"
@@ -340,8 +350,8 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 				kubeletSysconfig,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/sysconfig/kubelet"})
-			//				plan.DependOn("install:kubelet"))
+					Destination: "/etc/sysconfig/kubelet"},
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		}
 	case resource.PkgTypeDeb:
 		if disableSwap {
@@ -357,8 +367,8 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 				kubeletDefault,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/default/kubelet"})
-			//				plan.DependOn("install:kubelet"))
+					Destination: "/etc/default/kubelet"},
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		} else {
 			kubeletDefault := "configure:kubelet-default"
 			kubeletDeps = append(kubeletDeps, kubeletDefault)
@@ -366,15 +376,14 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 				kubeletDefault,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/default/kubelet"})
-			//				plan.DependOn("install:kubelet"))
+					Destination: "/etc/default/kubelet"},
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		}
 	}
 	b.AddResource(
 		"systemd:daemon-reload",
-		&resource.Run{Script: object.String("systemctl daemon-reload")})
-	//		plan.DependOn("install:kubelet"),
-	//	)
+		&resource.Run{Script: object.String("systemctl daemon-reload")},
+		plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 	b.AddResource(
 		"service-init:kubelet",
 		&resource.Service{Name: "kubelet", Status: "active", Enabled: true},
