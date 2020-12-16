@@ -226,6 +226,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 		}
 	}
 	if flavor != nil {
+		log.Infof("Using cluster flavor: %s", params.Flavor.Name)
 		params.AssetDescriptions = map[string]kubeadm.AssetDescription{}
 		for _, name := range []string{"DNS", "Etcd", "Kubernetes"} {
 			repo, tag, err := flavor.ImageInfo(name)
@@ -239,6 +240,8 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 			}
 		}
 	}
+
+	log.Info("Using default cluster flavor")
 
 	log.Info("Validated params")
 	cfg, err := envcfg.GetEnvSpecificConfig(ctx, o.PkgType, params.Namespace, params.KubeletConfig.CloudProvider, o.Runner)
@@ -281,7 +284,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	if err != nil {
 		return nil, err
 	}
-	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller)
+	k8sRes := recipe.BuildK8SPlan(kubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller, flavor)
 	b.AddResource("install:k8s", k8sRes, plan.DependOn("install:cri"))
 
 	log.Info("Built k8s plan")
@@ -922,7 +925,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	if err != nil {
 		return nil, err
 	}
-	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller)
+	instK8sRsrc := recipe.BuildK8SPlan(params.KubernetesVersion, params.KubeletConfig.NodeIP, cfg.SELinuxInstalled, cfg.SetSELinuxPermissive, cfg.DisableSwap, cfg.LockYUMPkgs, o.PkgType, params.KubeletConfig.CloudProvider, params.KubeletConfig.ExtraArguments, binInstaller, flavor)
 	log.Info("Built k8s plan")
 
 	b.AddResource("install:k8s", instK8sRsrc, plan.DependOn("install.cri"))

@@ -80,6 +80,12 @@ func (e *EKSD) ImageInfo(name string) (repo string, tag string, err error) {
 		if a.Type == "Image" {
 			i := strings.Split(a.Image.URI, ":")
 			repo := i[0][:strings.LastIndex(i[0], "/")]
+			if name == "Kubernetes" {
+				firstDashIdx := strings.Index(i[1], "-")
+				if firstDashIdx != -1 {
+					return repo, i[1][firstDashIdx:], nil
+				}
+			}
 			return repo, i[1], nil
 		}
 	}

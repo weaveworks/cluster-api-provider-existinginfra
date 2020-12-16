@@ -123,6 +123,18 @@ spec:
               - package
               - version
               type: object
+            flavor:
+              description: ClusterFlavor is used to define cluster override values
+                and configuration
+              properties:
+                manifestURL:
+                  type: string
+                name:
+                  type: string
+              required:
+              - manifestURL
+              - name
+              type: object
             httpProxy:
               type: string
             imageRepository:
