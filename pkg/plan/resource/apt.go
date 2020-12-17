@@ -31,7 +31,7 @@ func (a *aptInstaller) UpdateCache(ctx context.Context) error {
 }
 
 func (a *aptInstaller) Install(ctx context.Context, name, suffix string) error {
-	flags := "--yes --quiet --verbose-versions --no-install-recommends --allow-downgrades"
+	flags := "--yes --quiet --verbose-versions --no-install-recommends --allow-downgrades -o DPkg::Options::='--force-confnew'"
 	cmd := fmt.Sprintf("%s '%s' %s install '%s%s'", env, a.CommandMaybeDefault(), flags, name, suffix)
 	if out, err := wrapRetry(a.Runner).RunCommand(ctx, cmd, nil); err != nil {
 		return fmt.Errorf("command %q failed: %v; output: %s", cmd, err, out)
