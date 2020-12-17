@@ -41,12 +41,12 @@ func TestBinInstallerFlavor(t *testing.T) {
 	assert.NotNil(t, f)
 	res, ok := f("kubelet", "v2.3").(*resource.Run)
 	assert.True(t, ok)
-	assert.Contains(t, res.Script, "curl -o /bin/kubelet https")
-	assert.Contains(t, res.Script, "chmod 755 /bin/kubelet")
+	assert.Contains(t, res.Script, "curl -o /usr/bin/kubelet https")
+	assert.Contains(t, res.Script, "chmod 755 /usr/bin/kubelet")
 
 	res, ok = f("kubectl", "v2.3").(*resource.Run)
 	assert.True(t, ok)
-	assert.Contains(t, res.Script, "curl -o /bin/kubectl https")
-	assert.Contains(t, res.Script, "chmod 755 /bin/kubectl")
+	assert.Contains(t, res.Script, "curl -o /usr/bin/kubectl https")
+	assert.Contains(t, res.Script, "chmod 755 /usr/bin/kubectl")
 
 }
