@@ -216,7 +216,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 	if err := params.Validate(); err != nil {
 		return nil, err
 	}
-	// Replace w/ info from apply
+
 	var flavor *eksd.EKSD = nil
 	var err error
 	if params.Flavor.Name == eksd.Flavor {

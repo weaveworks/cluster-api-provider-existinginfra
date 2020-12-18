@@ -54,7 +54,10 @@ func (d *Deb) Apply(ctx context.Context, runner plan.Runner, diff plan.Diff) (pr
 
 func (d *Deb) Undo(ctx context.Context, runner plan.Runner, current plan.State) error {
 	a := aptInstaller{Runner: runner}
-	return a.Purge(ctx, d.Name)
+	if err := a.Purge(ctx, d.Name); err != nil {
+		fmt.Printf("Failed to remove package: %s\n", d.Name)
+	}
+	return nil
 }
 
 func DebResourceFromPackage(p debPkgInfo) *Deb {
