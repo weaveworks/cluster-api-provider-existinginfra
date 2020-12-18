@@ -253,9 +253,13 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
 		if flavor != nil {
 			b.AddResource("install:kubelet-package", &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
-			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("install:kubelet-package"))
+			b.AddResource(
+				"cleanup:kubelet",
+				&resource.Run{Script: object.String("pkill kubelet | true")},
+				plan.DependOn("install:kubelet-package"))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
 		} else {
-			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
 		}
 		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion))
 		b.AddResource("install:kubeadm",
@@ -266,8 +270,13 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	case resource.PkgTypeDeb:
 		// TODO(michal): Install the newest release version by default instead of hardcoding "-00".
 		if flavor != nil {
-			b.AddResource("install:kubelet-package", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
-			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("install:kubelet-package"))
+			b.AddResource("install:kubelet-package", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"},
+				plan.DependOn("configure:kubernetes-repo"))
+			b.AddResource(
+				"cleanup:kubelet",
+				&resource.Run{Script: object.String("pkill kubelet | true")},
+				plan.DependOn("install:kubelet-package"))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
 		} else {
 			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
 		}
@@ -282,9 +291,7 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				Script: object.String("yum versionlock add 'kube*'"),
 				// If we never installed yum-plugin-versionlock or kubernetes, this should not fail
 				UndoScript: object.String("yum versionlock delete 'kube*' || true")},
-			// plan.DependOn("install:kubectl"),
-			// plan.DependOn("install:make-executable"),
-			// plan.DependOn("install:kubelet"),
+			plan.DependOn("install:kubectl"),
 		)
 	}
 	b.AddResource(

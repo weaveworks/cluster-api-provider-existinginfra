@@ -1322,6 +1322,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		// Update the config map with the new spec
 		if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
 			configMap.Data["spec"] = specByteHash
+			configMap.Data["bigspec"] = string(specBytes)
 			return nil
 		}); err != nil {
 			log.Errorf("Failed to update cluster config map: %v", err)
@@ -1339,6 +1340,8 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	}
 
 	log.Info("Cluster configuration changed; marking machines as needing repaving")
+	log.Infof("Original: %s", cmap.Data["bigspec"])
+	log.Infof("New: %s", specBytes)
 
 	if err := m.reconciler.updateAPIServerArgs(ctx, &eic.Spec.APIServer.ExtraArguments); err != nil {
 		log.Errorf("failed to update API server args: %v", err)
@@ -1387,6 +1390,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	// Update the config map with the new spec
 	if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
 		configMap.Data["spec"] = specByteHash
+		configMap.Data["bigspec"] = string(specBytes)
 		return nil
 	}); err != nil {
 		log.Errorf("Failed to update cluster config map: %v", err)
