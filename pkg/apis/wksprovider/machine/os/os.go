@@ -252,7 +252,7 @@ func CreateSeedNodeSetupPlan(ctx context.Context, o *OS, params SeedNodeParams) 
 
 	// Get cluster
 	cluster := params.ExistingInfraCluster
-
+	cluster.Spec.DeprecatedSSHKeyPath = "" // no longer used
 	log.Infof("Got cluster")
 
 	kubernetesVersion := getKubernetesVersion(&cluster)

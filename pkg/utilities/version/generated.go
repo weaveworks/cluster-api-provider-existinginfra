@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "eks-d-c9c75b1b"
+const ImageTag = "eks-d-db1506c3"
