@@ -200,7 +200,7 @@ func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) 
 			binPath := "/usr/bin"
 			return &resource.Run{
 				Script:     object.String(fmt.Sprintf("curl -o %s/%s %s && chmod 755 %s/%s", binPath, binName, binURL, binPath, binName)),
-				UndoScript: object.String(fmt.Sprintf("rm %s/%s || true", binPath, binName))}
+				UndoScript: object.String(fmt.Sprintf("pkill --uid 0 %s && rm %s/%s || true", binPath, binName, binName))}
 		}, nil
 	}
 	if pkgType == resource.PkgTypeDeb {
