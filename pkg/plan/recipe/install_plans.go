@@ -259,7 +259,7 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				plan.DependOn("install:kubelet-package"))
 			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
 		} else {
-			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
 		}
 		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion))
 		b.AddResource("install:kubeadm",
