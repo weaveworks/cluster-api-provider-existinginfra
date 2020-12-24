@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "eks-d-9a5deada"
+const ImageTag = "WKP-1635-check-eksd-sha-ddd4544c-WIP"

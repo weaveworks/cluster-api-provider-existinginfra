@@ -191,16 +191,16 @@ func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) 
 		log.Debugf("Using flavor %+v", f)
 		return func(binName, version string) plan.Resource {
 			// TODO (Mark) logic for the architecture
-			binURL, _, err := f.KubeBinURL(binName)
+			binURL, sha256, err := f.KubeBinURL(binName)
 			if err != nil {
 				log.Fatalf("%v", err)
 				return nil
 			}
 			// TODO Use the sha256 value to verify the downlaod
-			binPath := "/usr/bin"
+			binPath := "/usr/bin/" + binName
 			return &resource.Run{
-				Script:     object.String(fmt.Sprintf("curl -o %s/%s %s && chmod 755 %s/%s", binPath, binName, binURL, binPath, binName)),
-				UndoScript: object.String(fmt.Sprintf("pkill --uid 0 %s && rm %s/%s || true", binPath, binName, binName))}
+				Script:     object.String(fmt.Sprintf("curl -o %s %s && openssl dgst -sha256 %s | grep \"%s\" > /dev/null && chmod 755 %s", binPath, binURL, binPath, sha256, binPath)),
+				UndoScript: object.String(fmt.Sprintf("pkill --uid 0 %s && rm %s || true", binName, binPath))}
 		}, nil
 	}
 	if pkgType == resource.PkgTypeDeb {
