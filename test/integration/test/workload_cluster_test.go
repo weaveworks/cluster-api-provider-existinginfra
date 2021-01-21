@@ -275,35 +275,49 @@ func seedNodeCall(c *testContext, cmd string) ([]byte, []byte, error) {
 	return c.sshCall("127.0.0.1", "2223", cmd)
 }
 
+func seedNodeAction(c *testContext, cmd string) {
+	c.makeSSHCallAndCheckError("127.0.0.1", "2223", cmd)
+}
+
 // Set up fstab so swap settings are persisted (so we can test unsetting them)
 func ensureSwapSettingsArePersisted(c *testContext) {
 	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
 	require.NoError(c.t, err)
-	swaplines := strings.Split(string(swapdata), "\n")
-	fstabdata, _, err := seedNodeCall(c, "cat /etc/fstab | cut -f1 -d' '")
-	require.NoError(c.t, err)
-	fstablines := strings.Split(string(fstabdata), "\n")
-	require.NoError(c.t, err)
-
-	fmt.Printf("SWAPLINES: %s\nFSTABLINES: %s\n", swaplines, fstablines)
-
 	lines := ""
-	for _, line := range swaplines {
-		found := false
-		// Place the lines in /etc/fstab if not present so they will persist
-		swapname := strings.Trim(line, " ")
-		for _, tabline := range fstablines {
-			if swapname == strings.Trim(tabline, " ") {
-				found = true
-				break
+
+	if len(swapdata) == 0 {
+		seedNodeAction(c, "dd if=/dev/zero of=/swapfile bs=1024 count=1048576")
+		seedNodeAction(c, "chmod 600 /swapfile")
+		seedNodeAction(c, "mkswap /swapfile")
+		seedNodeAction(c, "swapon /swapfile")
+		seedNodeAction(c, "echo /swapfile swap swap defaults 0 0 > /etc/fstab")
+		fmt.Printf("FSTAB:\n")
+		seedNodeAction(c, "cat /etc/fstab")
+	} else {
+		swaplines := strings.Split(string(swapdata), "\n")
+		fstabdata, _, err := seedNodeCall(c, "cat /etc/fstab | cut -f1 -d' '")
+		require.NoError(c.t, err)
+		fstablines := strings.Split(string(fstabdata), "\n")
+		require.NoError(c.t, err)
+
+		fmt.Printf("SWAPLINES: %s\nFSTABLINES: %s\n", swaplines, fstablines)
+
+		for _, line := range swaplines {
+			found := false
+			// Place the lines in /etc/fstab if not present so they will persist
+			swapname := strings.Trim(line, " ")
+			for _, tabline := range fstablines {
+				if swapname == strings.Trim(tabline, " ") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				lines = lines + fmt.Sprintf("%s swap swap defaults 0 0\n", swapname)
 			}
 		}
-		if !found {
-			lines = lines + fmt.Sprintf("%s swap swap defaults 0 0\n", swapname)
-		}
 	}
-
-	seedNodeCall(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
+	seedNodeAction(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
 }
 
 // Check that swap stays off after a reboot
