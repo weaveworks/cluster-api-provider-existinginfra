@@ -281,6 +281,7 @@ func seedNodeAction(c *testContext, cmd string) {
 
 // Set up fstab so swap settings are persisted (so we can test unsetting them)
 func ensureSwapSettingsArePersisted(c *testContext) {
+	log.Info("Storing persistent swap settings to later be disabled...")
 	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
 	require.NoError(c.t, err)
 
@@ -313,6 +314,7 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 
 // Check that swap stays off after a reboot
 func ensureSwapShutdownPersists(c *testContext) {
+	log.Info("Ensuring persistent swap settings were removed during cluster creation...")
 	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
 	require.NoError(c.t, err)
 	require.Equal(c.t, string(swapdata), "")
