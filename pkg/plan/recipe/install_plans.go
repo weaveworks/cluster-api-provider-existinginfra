@@ -348,7 +348,10 @@ func buildDisableSwapPlan() plan.Resource {
 	b.AddResource("configure:disable-swap-in-session", &resource.Run{Script: object.String("/sbin/swapoff -a")})
 	b.AddResource(
 		"configure:disable-swap-going-forward",
-		&resource.Run{Script: object.String(`tmpfile=$(mktemp /tmp/abc-script.XXXXXX) && egrep -v '\s*\S*\s*\S*\s*swap.*' /etc/fstab > $tmpfile && mv $tmpfile /etc/fstab`)},
+		&resource.Run{Script: object.String(
+			// The ";" instead of "&&" below is because we want to copy the empty temp file over /etc/fstab if /etc/fstab only contains swap entries
+			// and the "egrep" will fail on an empty file
+			`tmpfile=$(mktemp /tmp/disable-swap.XXXXXX) && egrep -v '\s*\S*\s*\S*\s*swap.*' /etc/fstab > $tmpfile; mv $tmpfile /etc/fstab`)},
 		plan.DependOn("configure:discable-swap-in-session"))
 	p, err := b.Plan()
 	if err != nil {

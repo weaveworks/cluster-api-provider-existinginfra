@@ -283,7 +283,6 @@ func seedNodeAction(c *testContext, cmd string) {
 func ensureSwapSettingsArePersisted(c *testContext) {
 	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
 	require.NoError(c.t, err)
-	lines := ""
 
 	if len(swapdata) == 0 {
 		seedNodeAction(c, "dd if=/dev/zero of=/swapfile bs=1024 count=1048576")
@@ -291,9 +290,8 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 		seedNodeAction(c, "mkswap /swapfile")
 		seedNodeAction(c, "swapon /swapfile")
 		seedNodeAction(c, "echo /swapfile swap swap defaults 0 0 > /etc/fstab")
-		fmt.Printf("FSTAB:\n")
-		seedNodeAction(c, "cat /etc/fstab")
 	} else {
+		lines := ""
 		swaplines := strings.Split(string(swapdata), "\n")
 		fstabdata, _, err := seedNodeCall(c, "cat /etc/fstab | cut -f1 -d' '")
 		require.NoError(c.t, err)
@@ -316,8 +314,8 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 				lines = lines + fmt.Sprintf("%s swap swap defaults 0 0\n", swapname)
 			}
 		}
+		seedNodeAction(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
 	}
-	seedNodeAction(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
 }
 
 // Check that swap stays off after a reboot
