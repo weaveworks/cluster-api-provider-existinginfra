@@ -121,6 +121,9 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	// Wait for the management cluster to be ready
 	ensureAllManagementPodsAreRunning(c)
 
+	// Store swap settings in /etc/fstab so we can demonstrate they are removed
+	ensureSwapSettingsArePersisted(c)
+
 	// Create a workload cluster
 	createWorkloadCluster(c, version)
 
