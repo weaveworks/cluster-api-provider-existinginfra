@@ -352,7 +352,7 @@ func buildDisableSwapPlan() plan.Resource {
 			// The ";" instead of "&&" below is because we want to copy the empty temp file over /etc/fstab if /etc/fstab only contains swap entries
 			// and the "egrep" will fail on an empty file
 			`tmpfile=$(mktemp /tmp/disable-swap.XXXXXX) && egrep -v '\s*\S*\s*\S*\s*swap.*' /etc/fstab > $tmpfile; mv $tmpfile /etc/fstab`)},
-		plan.DependOn("configure:discable-swap-in-session"))
+		plan.DependOn("configure:disable-swap-in-session"))
 	p, err := b.Plan()
 	if err != nil {
 		log.Fatalf("%v", err)

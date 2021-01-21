@@ -285,37 +285,30 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 	require.NoError(c.t, err)
 
 	if len(swapdata) == 0 {
-		seedNodeAction(c, "dd if=/dev/zero of=/swapfile bs=1024 count=1048576")
-		seedNodeAction(c, "chmod 600 /swapfile")
-		seedNodeAction(c, "mkswap /swapfile")
-		seedNodeAction(c, "swapon /swapfile")
-		seedNodeAction(c, "echo /swapfile swap swap defaults 0 0 > /etc/fstab")
-	} else {
-		lines := ""
-		swaplines := strings.Split(string(swapdata), "\n")
-		fstabdata, _, err := seedNodeCall(c, "cat /etc/fstab | cut -f1 -d' '")
-		require.NoError(c.t, err)
-		fstablines := strings.Split(string(fstabdata), "\n")
-		require.NoError(c.t, err)
+		seedNodeAction(c, "echo '# a comment' > /etc/fstab")
+	}
+	lines := ""
+	swaplines := strings.Split(string(swapdata), "\n")
+	fstabdata, _, err := seedNodeCall(c, "cat /etc/fstab | cut -f1 -d' '")
+	require.NoError(c.t, err)
+	fstablines := strings.Split(string(fstabdata), "\n")
+	require.NoError(c.t, err)
 
-		fmt.Printf("SWAPLINES: %s\nFSTABLINES: %s\n", swaplines, fstablines)
-
-		for _, line := range swaplines {
-			found := false
-			// Place the lines in /etc/fstab if not present so they will persist
-			swapname := strings.Trim(line, " ")
-			for _, tabline := range fstablines {
-				if swapname == strings.Trim(tabline, " ") {
-					found = true
-					break
-				}
-			}
-			if !found {
-				lines = lines + fmt.Sprintf("%s swap swap defaults 0 0\n", swapname)
+	for _, line := range swaplines {
+		found := false
+		// Place the lines in /etc/fstab if not present so they will persist
+		swapname := strings.Trim(line, " ")
+		for _, tabline := range fstablines {
+			if swapname == strings.Trim(tabline, " ") {
+				found = true
+				break
 			}
 		}
-		seedNodeAction(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
+		if !found {
+			lines = lines + fmt.Sprintf("%s swap swap defaults 0 0\n", swapname)
+		}
 	}
+	seedNodeAction(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
 }
 
 // Check that swap stays off after a reboot
