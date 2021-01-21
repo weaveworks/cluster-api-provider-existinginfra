@@ -285,6 +285,8 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 	fstablines := strings.Split(string(fstabdata), "\n")
 	require.NoError(c.t, err)
 
+	fmt.Printf("SWAPLINES: %s\nFSTABLINES: %s\n", swaplines, fstablines)
+
 	lines := ""
 	for _, line := range swaplines {
 		found := false
@@ -301,7 +303,6 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 		}
 	}
 
-	fmt.Printf("LINES: %s\n", lines)
 	seedNodeCall(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
 }
 
@@ -309,7 +310,7 @@ func ensureSwapSettingsArePersisted(c *testContext) {
 func ensureSwapShutdownPersists(c *testContext) {
 	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
 	require.NoError(c.t, err)
-	require.Equal(c.t, swapdata, "")
+	require.Equal(c.t, string(swapdata), "")
 }
 
 // Wait for the management cluster to be ready for cluster creation
