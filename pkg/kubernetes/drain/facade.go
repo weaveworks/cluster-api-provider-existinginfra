@@ -19,7 +19,7 @@ var DefaultTimeOut = 1 * time.Minute
 // Params groups required inputs to drain a Kubernetes node.
 type Params struct {
 	Force               bool
-	DeleteLocalData     bool
+	DeleteEmptyDirData  bool
 	IgnoreAllDaemonSets bool
 	TimeOut             time.Duration
 }
@@ -32,7 +32,7 @@ func Drain(node *corev1.Node, clientSet kubernetes.Interface, params Params) err
 		Client:              clientSet,
 		GracePeriodSeconds:  -1,
 		Force:               params.Force,
-		DeleteLocalData:     params.DeleteLocalData,
+		DeleteEmptyDirData:  params.DeleteEmptyDirData,
 		IgnoreAllDaemonSets: params.IgnoreAllDaemonSets,
 		Out:                 drainLog,
 	}
