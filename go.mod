@@ -14,6 +14,7 @@ require (
     github.com/onsi/ginkgo v1.12.1
     github.com/onsi/gomega v1.10.1
     github.com/pkg/errors v0.9.1
+    github.com/pmezard/go-difflib v1.0.0
     github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
     github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
     github.com/sirupsen/logrus v1.6.0
