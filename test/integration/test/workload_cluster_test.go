@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"text/template"
 	"time"
@@ -120,6 +121,9 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	// Wait for the management cluster to be ready
 	ensureAllManagementPodsAreRunning(c)
 
+	// Store swap settings in /etc/fstab so we can demonstrate they are removed
+	ensureSwapSettingsArePersisted(c)
+
 	// Create a workload cluster
 	createWorkloadCluster(c, version)
 
@@ -141,6 +145,8 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	// Check that the arguments are updated
 	ensureNewArgumentsWereProcessed(c)
 
+	// Check that swap remains off after a reboot
+	ensureSwapShutdownPersists(c)
 }
 
 func installCertManager(c *testContext) {
@@ -263,6 +269,55 @@ func ensureNewArgumentsWereProcessed(c *testContext) {
 			c.makeSSHCallWithRetries(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString), 5)
 		}
 	}
+}
+
+func seedNodeCall(c *testContext, cmd string) ([]byte, []byte, error) {
+	return c.sshCall("127.0.0.1", "2223", cmd)
+}
+
+func seedNodeAction(c *testContext, cmd string) {
+	c.makeSSHCallAndCheckError("127.0.0.1", "2223", cmd)
+}
+
+// Set up fstab so swap settings are persisted (so we can test unsetting them)
+func ensureSwapSettingsArePersisted(c *testContext) {
+	log.Info("Storing persistent swap settings to later be disabled...")
+	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
+	require.NoError(c.t, err)
+
+	if len(swapdata) == 0 {
+		seedNodeAction(c, "echo '# a comment' > /etc/fstab")
+	}
+	lines := ""
+	swaplines := strings.Split(string(swapdata), "\n")
+	fstabdata, _, err := seedNodeCall(c, "cat /etc/fstab | cut -f1 -d' '")
+	require.NoError(c.t, err)
+	fstablines := strings.Split(string(fstabdata), "\n")
+	require.NoError(c.t, err)
+
+	for _, line := range swaplines {
+		found := false
+		// Place the lines in /etc/fstab if not present so they will persist
+		swapname := strings.Trim(line, " ")
+		for _, tabline := range fstablines {
+			if swapname == strings.Trim(tabline, " ") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			lines = lines + fmt.Sprintf("%s swap swap defaults 0 0\n", swapname)
+		}
+	}
+	seedNodeAction(c, fmt.Sprintf("echo '%s' >> /etc/fstab", lines))
+}
+
+// Check that swap stays off after a reboot
+func ensureSwapShutdownPersists(c *testContext) {
+	log.Info("Ensuring persistent swap settings were removed during cluster creation...")
+	swapdata, _, err := seedNodeCall(c, "swapon --show --noheadings | cut -f1 -d' '")
+	require.NoError(c.t, err)
+	require.Equal(c.t, string(swapdata), "")
 }
 
 // Wait for the management cluster to be ready for cluster creation
