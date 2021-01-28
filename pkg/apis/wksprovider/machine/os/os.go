@@ -550,7 +550,9 @@ func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 	}
 	var updatedController bool
 	for i := 0; i < len(d.Spec.Template.Spec.Containers); i++ {
+		log.Infof("CONTAINER NAME: %s", d.Spec.Template.Spec.Containers[i].Name)
 		if d.Spec.Template.Spec.Containers[i].Name == "controller" {
+			log.Infof("ENV BEFORE: %v", d.Spec.Template.Spec.Containers[i].Env)
 			currentImage := d.Spec.Template.Spec.Containers[i].Image
 			if !fullOverride {
 				controllerImageOverride = currentImage[0:strings.Index(currentImage, ":")+1] + controllerImageOverride
@@ -559,16 +561,19 @@ func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 			env := d.Spec.Template.Spec.Containers[i].Env
 			found := false
 			for _, entry := range env {
+				log.Infof("HERE: %v", entry)
 				if entry.Name == "EXISTINGINFRA_CONTROLLER_IMAGE" {
 					entry.Value = controllerImageOverride
 					found = true
 				}
 			}
 			if !found {
+				log.Infof("WHERE!")
 				env = append(env, v1.EnvVar{Name: "EXISTINGINFRA_CONTROLLER_IMAGE", Value: controllerImageOverride})
 			}
 			d.Spec.Template.Spec.Containers[i].Env = env
 			updatedController = true
+			log.Infof("ENV AFTER: %v", d.Spec.Template.Spec.Containers[i].Env)
 		}
 	}
 	if !updatedController {
