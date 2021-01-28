@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "v0.1.1"
+const ImageTag = "WKP-1054-swap-settings-are-not-persistent-f75d2eb6"
