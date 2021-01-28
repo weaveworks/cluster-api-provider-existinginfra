@@ -263,7 +263,7 @@ func (c *testContext) ensureCount(itemType string, count int, kubeconfigPath str
 		}
 		log.Infof("Waiting for %d %s, retry: %d...", count, itemType, retryCount)
 		c.runWithConfig(commandConfig{Env: env("KUBECONFIG=" + kubeconfigPath)},
-			"sh", "-c", "kubectl logs -f $(kubectl get pods -A | grep wks-controller | awk '{print($2)}') -n test")
+			"sh", "-c", "kubectl logs $(kubectl get pods -A | grep wks-controller | awk '{print($2)}') -n test")
 		time.Sleep(30 * time.Second)
 	}
 	require.FailNow(c.t, fmt.Sprintf("Fewer than %d %s are running...", count, itemType))

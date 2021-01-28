@@ -331,6 +331,8 @@ func ensureAllWorkloadNodesAreRunning(c *testContext, workloadKubeconfig string)
 	log.Info("Ensuring nodes are running...")
 	c.ensureCount("nodes", 2, workloadKubeconfig)
 	c.ensureRunning("nodes", workloadKubeconfig)
+	c.runWithConfig(commandConfig{Env: env("KUBECONFIG=" + workloadKubeconfig)},
+		"sh", "-c", "kubectl logs -f $(kubectl get pods -A | grep wks-controller | awk '{print($2)}') -n test")
 }
 
 // Wait for the workload cluster to be NOT ready
