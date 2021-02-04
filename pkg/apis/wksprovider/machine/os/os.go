@@ -558,7 +558,8 @@ func UpdateControllerImage(manifest []byte, controllerImageOverride string) ([]b
 			d.Spec.Template.Spec.Containers[i].Image = controllerImageOverride
 			env := d.Spec.Template.Spec.Containers[i].Env
 			found := false
-			for _, entry := range env {
+			for idx := range env {
+				entry := &env[idx]
 				if entry.Name == "EXISTINGINFRA_CONTROLLER_IMAGE" {
 					entry.Value = controllerImageOverride
 					found = true
