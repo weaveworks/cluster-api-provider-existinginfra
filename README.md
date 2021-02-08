@@ -59,6 +59,8 @@ If you have any questions about, feedback for or problems with `cluster-api-prov
 - Ask a question on the [#general](https://weave-community.slack.com/messages/general/) Slack channel.
 - [File an issue](https://github.com/weaveworks/cluster-api-provider-existinginfra/issues/new).
 
+Weaveworks follows the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/master/code-of-conduct.md). Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting a Weaveworks project maintainer, or Alexis Richardson (alexis@weave.works).
+
 Your feedback is always welcome!
 
 ## License
