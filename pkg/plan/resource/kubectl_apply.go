@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -23,6 +24,8 @@ type KubectlApply struct {
 	// Filename is the remote manifest file name.
 	// Only provide this if you do NOT provide ManifestPath or ManifestURL.
 	Filename fmt.Stringer `structs:"filename"`
+	// Suffix to append to image tags if required (e.g. EKS-D has a special tag suffix of "-eks-1-18-1")
+	ImageSuffix fmt.Stringer `structs:"imageSuffix:omitempty"`
 	// Manifest is the actual YAML/JSON content of the manifest to apply.
 	// If this is provided, then there is no need to provide ManifestPath, but
 	// Filename should be provided in order to name the remote manifest file.
@@ -115,7 +118,13 @@ func (ka *KubectlApply) Apply(ctx context.Context, runner plan.Runner, diff plan
 	}
 
 	if str(ka.Namespace) != "" {
-		content, err := manifest.WithNamespace(serializer.FromBytes(c), str(ka.Namespace))
+		namespaced, err := manifest.WithNamespace(serializer.FromBytes(c), str(ka.Namespace))
+		if err != nil {
+			return false, err
+		}
+		content, err := manifest.WithImageTagUpdate(ioutil.NopCloser(bytes.NewReader(namespaced)), func(tag string) (string, error) {
+			return tag + str(ka.ImageSuffix), nil
+		})
 		if err != nil {
 			return false, err
 		}

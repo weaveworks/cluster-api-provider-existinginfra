@@ -19,6 +19,8 @@ spec:
   scope: Namespaced
   validation:
     openAPIV3Schema:
+      description: ExistingInfraCluster is the Schema for the existinginfraclusters
+        API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -33,6 +35,7 @@ spec:
         metadata:
           type: object
         spec:
+          description: ClusterSpec defines the desired state of ExistingInfraCluster
           properties:
             addons:
               items:
@@ -99,7 +102,11 @@ spec:
               type: object
             cloudProvider:
               type: string
+            cni:
+              type: string
             controlPlaneEndpoint:
+              type: string
+            controllerImage:
               type: string
             cri:
               properties:
@@ -114,9 +121,23 @@ spec:
               - package
               - version
               type: object
+            flavor:
+              description: ClusterFlavor is used to define cluster override values
+                and configuration
+              properties:
+                manifestURL:
+                  type: string
+                name:
+                  type: string
+              required:
+              - manifestURL
+              - name
+              type: object
             httpProxy:
               type: string
             imageRepository:
+              type: string
+            imageSuffix:
               type: string
             kubeletArguments:
               items:
@@ -167,6 +188,7 @@ spec:
           - cri
           type: object
         status:
+          description: ClusterStatus defines the observed state of ExistingInfraCluster
           properties:
             ready:
               type: boolean

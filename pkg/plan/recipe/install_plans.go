@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	existinginfrav1 "github.com/weaveworks/cluster-api-provider-existinginfra/apis/cluster.weave.works/v1alpha3"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/flavors/eksd"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/plan/resource"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/envcfg"
@@ -184,10 +185,37 @@ func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime
 	return &p
 }
 
-// BuildK8SPlan creates a plan for running kubernetes on a node
-func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstalled, setSELinuxPermissive, disableSwap, lockYUMPkgs bool, pkgType resource.PkgType, cloudProvider string, extraArgs map[string]string) plan.Resource {
-	b := plan.NewBuilder()
+// BinInstaller creates a function to install binaries based on package type and cluster flavors
+func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) plan.Resource, error) {
+	if f != nil {
+		log.Debugf("Using flavor %+v", f)
+		return func(binName, version string) plan.Resource {
+			// TODO (Mark) logic for the architecture
+			binURL, sha256, err := f.KubeBinURL(binName)
+			if err != nil {
+				log.Fatalf("%v", err)
+				return nil
+			}
+			binPath := "/usr/bin/" + binName
+			return &resource.Run{
+				Script:     object.String(fmt.Sprintf("curl -o %s %s && openssl dgst -sha256 %s | grep \"%s\" > /dev/null && chmod 755 %s", binPath, binURL, binPath, sha256, binPath)),
+				UndoScript: object.String(fmt.Sprintf("pkill --uid 0 %s && rm %s || true", binName, binPath))}
+		}, nil
+	}
+	if pkgType == resource.PkgTypeDeb {
+		return func(binName, version string) plan.Resource {
+			return &resource.Deb{Name: binName, Suffix: "=" + version + "-00"}
+		}, nil
+	}
+	return func(binName, version string) plan.Resource {
+		return &resource.RPM{Name: binName, Version: version, DisableExcludes: "kubernetes"}
+	}, nil
 
+}
+
+// BuildK8SPlan creates a plan for running kubernetes on a node
+func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstalled, setSELinuxPermissive, disableSwap, lockYUMPkgs bool, pkgType resource.PkgType, cloudProvider string, extraArgs map[string]string, binInstaller func(string, string) plan.Resource, flavor *eksd.EKSD) plan.Resource {
+	b := plan.NewBuilder()
 	// Kubernetes repos
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
@@ -222,18 +250,38 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	// Install k8s packages
 	switch pkgType {
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
-		b.AddResource("install:kubelet", &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
-		b.AddResource("install:kubectl", &resource.RPM{Name: "kubectl", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
+		if flavor != nil {
+			b.AddResource("install:kubelet-package", &resource.RPM{Name: "kubelet", Version: kubernetesVersion, DisableExcludes: "kubernetes"})
+			b.AddResource(
+				"cleanup:kubelet",
+				&resource.Run{Script: object.String("pkill kubelet | true")},
+				plan.DependOn("install:kubelet-package"))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
+		} else {
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion))
+		}
+		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion))
 		b.AddResource("install:kubeadm",
-			&resource.RPM{Name: "kubeadm", Version: kubernetesVersion, DisableExcludes: "kubernetes"},
+			binInstaller("kubeadm", kubernetesVersion),
 			plan.DependOn("install:kubectl"),
 			plan.DependOn("install:kubelet"),
 		)
 	case resource.PkgTypeDeb:
 		// TODO(michal): Install the newest release version by default instead of hardcoding "-00".
-		b.AddResource("install:kubelet", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
-		b.AddResource("install:kubeadm", &resource.Deb{Name: "kubeadm", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
-		b.AddResource("install:kubectl", &resource.Deb{Name: "kubectl", Suffix: "=" + kubernetesVersion + "-00"}, plan.DependOn("configure:kubernetes-repo"))
+		if flavor != nil {
+			b.AddResource("install:kubelet-package", &resource.Deb{Name: "kubelet", Suffix: "=" + kubernetesVersion + "-00"},
+				plan.DependOn("configure:kubernetes-repo"))
+			b.AddResource(
+				"cleanup:kubelet",
+				&resource.Run{Script: object.String("pkill kubelet | true")},
+				plan.DependOn("install:kubelet-package"))
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("cleanup:kubelet"))
+		} else {
+			b.AddResource("install:kubelet", binInstaller("kubelet", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+		}
+		b.AddResource("install:kubeadm", binInstaller("kubeadm", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"), plan.DependOn("install:kubelet"))
+		b.AddResource("install:kubectl", binInstaller("kubectl", kubernetesVersion), plan.DependOn("configure:kubernetes-repo"))
+
 	}
 	if lockYUMPkgs {
 		b.AddResource(
@@ -243,15 +291,28 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				// If we never installed yum-plugin-versionlock or kubernetes, this should not fail
 				UndoScript: object.String("yum versionlock delete 'kube*' || true")},
 			plan.DependOn("install:kubectl"),
-			plan.DependOn("install:kubeadm"),
-			plan.DependOn("install:kubelet"),
 		)
 	}
 	b.AddResource(
 		"create-dir:kubelet.service.d",
 		&resource.Dir{Path: object.String("/etc/systemd/system/kubelet.service.d")},
 	)
-	kubeletDeps := []string{"create-dir:kubelet.service.d"}
+	b.AddResource(
+		"install:kubeadm-conf",
+		&resource.File{Content: `# Note: This dropin only works with kubeadm and kubelet v1.11+
+[Service]
+Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+# This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+# This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+# the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+EnvironmentFile=-/etc/default/kubelet
+ExecStart=
+ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS`,
+			Destination: "/etc/systemd/system/kubelet.service.d/10-kubeadm.conf"},
+		plan.DependOn("create-dir:kubelet.service.d"))
+	kubeletDeps := []string{"install:kubeadm-conf"}
 	processCloudProvider := func(cmdline string) string {
 		if cloudProvider != "" {
 			log.WithField("cloudProvider", cloudProvider).Debug("using cloud provider")
@@ -287,7 +348,7 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
 					Destination: "/etc/sysconfig/kubelet"},
-				plan.DependOn("install:kubelet"))
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 			kubeletDeps = append(kubeletDeps, kubeletSysconfig)
 		} else {
 			kubeletSysconfig := "configure:kubelet-sysconfig"
@@ -297,7 +358,7 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
 					Destination: "/etc/sysconfig/kubelet"},
-				plan.DependOn("install:kubelet"))
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		}
 	case resource.PkgTypeDeb:
 		if disableSwap {
@@ -314,7 +375,7 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
 					Destination: "/etc/default/kubelet"},
-				plan.DependOn("install:kubelet"))
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		} else {
 			kubeletDefault := "configure:kubelet-default"
 			kubeletDeps = append(kubeletDeps, kubeletDefault)
@@ -323,14 +384,13 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
 					Destination: "/etc/default/kubelet"},
-				plan.DependOn("install:kubelet"))
+				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		}
 	}
 	b.AddResource(
 		"systemd:daemon-reload",
 		&resource.Run{Script: object.String("systemctl daemon-reload")},
-		plan.DependOn("install:kubelet"),
-	)
+		plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 	b.AddResource(
 		"service-init:kubelet",
 		&resource.Service{Name: "kubelet", Status: "active", Enabled: true},
@@ -362,7 +422,7 @@ func buildDisableSwapPlan() plan.Resource {
 
 // BuildKubeadmPrejoinPlan creates a sub-plan to prepare for running
 // kubeadm join.
-func BuildKubeadmPrejoinPlan(kubernetesVersion string, useIPTables bool) plan.Resource {
+func BuildKubeadmPrejoinPlan(useIPTables bool) plan.Resource {
 	b := plan.NewBuilder()
 	if useIPTables {
 		b.AddResource(

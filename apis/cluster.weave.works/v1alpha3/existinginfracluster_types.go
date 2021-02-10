@@ -43,18 +43,26 @@ type ClusterSpec struct {
 	Authentication *AuthenticationWebhook `json:"authenticationWebhook,omitempty"`
 	Authorization  *AuthorizationWebhook  `json:"authorizationWebhook,omitempty"`
 
-	OS              OSConfig         `json:"os,omitempty"`
-	CRI             ContainerRuntime `json:"cri"`
-	ImageRepository string           `json:"imageRepository,omitempty"`
-
-	ControlPlaneEndpoint string    `json:"controlPlaneEndpoint,omitempty"`
-	APIServer            APIServer `json:"apiServer,omitempty"`
+	OS                   OSConfig         `json:"os,omitempty"`
+	CRI                  ContainerRuntime `json:"cri"`
+	CNI                  string           `json:"cni"`
+	ImageRepository      string           `json:"imageRepository,omitempty"`
+	ImageSuffix          string           `json:"imageSuffix,omitempty"`
+	ControlPlaneEndpoint string           `json:"controlPlaneEndpoint,omitempty"`
+	APIServer            APIServer        `json:"apiServer,omitempty"`
 
 	KubeletArguments []ServerArgument `json:"kubeletArguments,omitempty"`
 
 	Addons []Addon `json:"addons,omitempty"`
 
-	CloudProvider string `json:"cloudProvider,omitempty"`
+	CloudProvider string        `json:"cloudProvider,omitempty"`
+	Flavor        ClusterFlavor `json:"flavor,omitempty"`
+}
+
+// ClusterFlavor is used to define cluster override values and configuration
+type ClusterFlavor struct {
+	Name        string `json:"name"`
+	ManifestURL string `json:"manifestURL"`
 }
 
 // ClusterStatus defines the observed state of ExistingInfraCluster

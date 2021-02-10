@@ -71,6 +71,9 @@ type KubeadmInit struct {
 	// ImageRepository sets the container registry to pull images from. If empty,
 	// `k8s.gcr.io` will be used by default.
 	ImageRepository string `structs:"imageRepository"`
+	// AssetDescriptions specifies the image repository and image tag for each potentially overridden
+	// asset (currently, DNS, Etcd, and Kubernetes)
+	AssetDescriptions map[string]kubeadmutil.AssetDescription `structs:"assetDescriptions"`
 	// AdditionalSANs can hold additional SANs to add to the API server certificate.
 	AdditionalSANs []string
 	// The namespace in which to init kubeadm
@@ -90,10 +93,21 @@ func (ki *KubeadmInit) State() plan.State {
 	return ToState(ki)
 }
 
+func isEKSD(repo string) bool {
+	return repo == "public.ecr.aws/eks-distro/kubernetes"
+}
+
 // Apply implements plan.Resource.
 // TODO: find a way to make this idempotent.
 // TODO: should such a resource be split into smaller resources?
 func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.Diff) (bool, error) {
+	// Can't override two ways
+	if ki.ImageRepository != "" && len(ki.AssetDescriptions) != 0 {
+		return false, fmt.Errorf("Kubernetes image repository defined twice; you must either define " +
+			"a global image repository in the ExistingInfraCluster manifest, or define specific image " +
+			"repositories via a flavor specification.")
+	}
+
 	log.Debug("Initializing Kubernetes cluster")
 
 	sshKey := []byte(ki.SSHKey)
@@ -110,8 +124,45 @@ func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.
 	if namespace == "" {
 		namespace = manifest.DefaultNamespace
 	}
+
+	var dns *kubeadmapi.DNS = nil
+	dnsAD, found := ki.AssetDescriptions["DNS"]
+	if found {
+		dns = &kubeadmapi.DNS{
+			Type: "",
+			ImageMeta: kubeadmapi.ImageMeta{
+				ImageRepository: dnsAD.ImageRepository, //"public.ecr.aws/eks-distro/coredns",
+				ImageTag:        dnsAD.ImageTag,        //"v1.7.0-eks-1-18-1",
+			},
+		}
+	}
+
+	var etcd *kubeadmapi.Etcd = nil
+	etcdAD, found := ki.AssetDescriptions["Etcd"]
+	if found {
+		etcd = &kubeadmapi.Etcd{
+			Local: &kubeadmapi.LocalEtcd{
+				ImageMeta: kubeadmapi.ImageMeta{
+					ImageRepository: etcdAD.ImageRepository, //"public.ecr.aws/eks-distro/etcd-io",
+					ImageTag:        etcdAD.ImageTag,        //"v3.4.14-eks-1-18-1",
+				},
+				DataDir:        "",
+				ExtraArgs:      nil,
+				ServerCertSANs: nil,
+				PeerCertSANs:   nil,
+			},
+		}
+	}
+
+	k8sImageTag := ""
+	kubeAD, found := ki.AssetDescriptions["Kubernetes"]
+	if found {
+		k8sImageTag = kubeAD.ImageTag
+		ki.ImageRepository = kubeAD.ImageRepository //"public.ecr.aws/eks-distro/kubernetes" // XXXXXXXXXXXXXXXXXX
+	}
+
 	clusterConfig, err := yaml.Marshal(kubeadm.NewClusterConfiguration(kubeadm.ClusterConfigurationParams{
-		KubernetesVersion:    ki.KubernetesVersion,
+		KubernetesVersion:    ki.KubernetesVersion + k8sImageTag,
 		NodeIPs:              []string{ki.PublicIP, ki.PrivateIP},
 		ControlPlaneEndpoint: ki.ControlPlaneEndpoint,
 		CloudProvider:        ki.CloudProvider,
@@ -120,6 +171,8 @@ func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.
 		ExtraArgs:            ki.ExtraAPIServerArgs,
 		ServiceCIDRBlock:     ki.ServiceCIDRBlock,
 		PodCIDRBlock:         ki.PodCIDRBlock,
+		DNS:                  dns,
+		Etcd:                 etcd,
 	}))
 	if err != nil {
 		return false, errors.Wrap(err, "failed to serialize kubeadm's ClusterConfiguration object")

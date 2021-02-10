@@ -333,6 +333,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 
 	seedNodeIP := sp.GetMasterPublicAddress()
 	log.Infof("About to set up seed node: %s", seedNodeIP)
+
 	if err := capeios.SetupSeedNode(ctx, installer, capeios.SeedNodeParams{
 		PublicIP:             seedNodeIP,
 		PrivateIP:            sp.GetMasterPrivateAddress(),
@@ -357,6 +358,7 @@ func (r *ExistingInfraClusterReconciler) initiateCluster(
 		AdditionalSANs:       sp.ClusterSpec.APIServer.AdditionalSANs,
 		Namespace:            ns,
 		AddonNamespaces:      map[string]string{},
+		Flavor:               sp.ClusterSpec.Flavor,
 	}); err != nil {
 		return gerrors.Wrapf(err, "failed to set up seed node (%s)", seedNodeIP)
 	}

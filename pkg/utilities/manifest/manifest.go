@@ -13,11 +13,13 @@ const (
 	corev1Version    = "v1"
 	listKind         = "List"
 	namespaceKind    = "Namespace"
+	podKind          = "Pod"
 	DefaultNamespace = "weavek8sops"
 )
 
 var DefaultAddonNamespaces = map[string]string{"weave-net": "kube-system"}
 
+// WithNamespace applies a specified namespace to each manifest in a '---' separated list
 func WithNamespace(rc io.ReadCloser, namespace string) ([]byte, error) {
 	// Create a FrameReader and FrameWriter, using YAML document separators
 	// The FrameWriter will write into buf
@@ -84,6 +86,114 @@ func WithNamespace(rc io.ReadCloser, namespace string) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// WithImageTagUpdate updates all image tags in containers within a top-level resource description or list of descriptions
+func WithImageTagUpdate(rc io.ReadCloser, updater func(string) (string, error)) ([]byte, error) {
+	// Create a FrameReader and FrameWriter, using YAML document separators
+	// The FrameWriter will write into buf
+	fr := serializer.NewYAMLFrameReader(rc)
+	buf := new(bytes.Buffer)
+	fw := serializer.NewYAMLFrameWriter(buf)
+
+	// Read all frames from the FrameReader
+	frames, err := serializer.ReadFrameList(fr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, frame := range frames {
+		// Parse the given frame's YAML. JSON also works
+		obj, err := kyaml.Parse(string(frame))
+		if err != nil {
+			return nil, err
+		}
+
+		if err := processImageSuffixEntry(obj, updater); err != nil {
+			return nil, err
+		}
+
+		// Convert the object to string, and write it to the FrameWriter
+		str, err := obj.String()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := fw.Write([]byte(str)); err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func processImageSuffixEntry(obj *kyaml.RNode, updater func(string) (string, error)) error {
+	// Get the TypeMeta of the given object
+	meta, err := obj.GetMeta()
+	if err != nil {
+		return err
+	}
+
+	// Use special handling for the v1.List, as we need to traverse each item in the .items list
+	// Otherwise, just run processImageSuffixEntry for the parsed object
+	if meta.APIVersion == corev1Version && meta.Kind == listKind {
+		// Visit each item under .items
+		if err := visitElementsForPath(obj, func(item *kyaml.RNode) error {
+			// Set image suffix on any images associated with the item
+			return processImageSuffixEntry(item, updater)
+		}, "items"); err != nil {
+			return err
+		}
+	} else {
+		// Update image tags if we're looking at a resource that includes container specifications
+
+		// Check for resources containing pod spec templates
+		updated, err := updateImage(obj, kyaml.Lookup("spec", "template", "spec", "containers"), updater)
+		if err != nil {
+			return err
+		}
+
+		if !updated {
+			// Check for explicit pods
+			meta, err := obj.GetMeta()
+			if err != nil {
+				return err
+			}
+			if meta.APIVersion == corev1Version && meta.Kind == podKind {
+				if _, err := updateImage(obj, kyaml.Lookup("spec", "containers"), updater); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func updateImage(obj *kyaml.RNode, lookup kyaml.PathGetter, updater func(string) (string, error)) (bool, error) {
+	node, err := obj.Pipe(lookup)
+	if err != nil {
+		return false, err
+	}
+
+	elems, err := node.Elements()
+	if err != nil {
+		return false, err
+	}
+
+	for _, container := range elems {
+		existingTag, err := container.Pipe(kyaml.Get("image"))
+		if err != nil {
+			return false, err
+		}
+		updated, err := updater(existingTag.YNode().Value)
+		if err != nil {
+			return false, err
+		}
+		container.Pipe(kyaml.SetField("image", kyaml.NewScalarRNode(updated)))
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func setNamespaceOnObject(obj *kyaml.RNode, namespace string) error {

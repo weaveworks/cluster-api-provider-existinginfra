@@ -175,7 +175,7 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		contextLog.Errorf("failed to update machine: %v", err)
 	}
 	if reschedule {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return ctrl.Result{}, err
 }
@@ -757,6 +757,18 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 			return nil, err
 		}
 	}
+	assetConfigMap, err := a.getAssetConfigMap(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	assetDescriptions := map[string]bootstraputils.AssetDescription{}
+	err = json.Unmarshal([]byte(assetConfigMap.Data["assets"]), &assetDescriptions)
+	if err != nil {
+		return nil, err
+	}
+
+	kubernetesVersion := machineutil.GetKubernetesVersion(machine)
+
 	plan, err := installer.CreateNodeSetupPlan(ctx, os.NodeParams{
 		IsMaster:                 machine.Labels["set"] == "master",
 		MasterIP:                 masterIP,
@@ -769,14 +781,17 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 			CloudProvider:  provider.Spec.CloudProvider,
 			ExtraArguments: specs.TranslateServerArgumentsToStringMap(provider.Spec.KubeletArguments),
 		},
-		KubernetesVersion:    machineutil.GetKubernetesVersion(machine),
+		KubernetesVersion:    kubernetesVersion,
 		CRI:                  provider.Spec.CRI,
+		CNI:                  provider.Spec.CNI,
 		ConfigFileSpecs:      provider.Spec.OS.Files,
 		ProviderConfigMaps:   configMaps,
 		AuthConfigMap:        authConfigMap,
 		Secrets:              authSecrets,
 		Namespace:            namespace,
 		ControlPlaneEndpoint: provider.Spec.ControlPlaneEndpoint,
+		AssetDescriptions:    assetDescriptions,
+		Flavor:               provider.Spec.Flavor,
 	})
 	if err != nil {
 		return nil, gerrors.Wrapf(err, "failed to create machine plan for %s", machine.Name)
@@ -785,13 +800,21 @@ func (a *ExistingInfraMachineReconciler) getNodePlan(ctx context.Context, provid
 }
 
 func (a *ExistingInfraMachineReconciler) getAuthConfigMap(ctx context.Context) (*corev1.ConfigMap, error) {
+	return a.getConfigMap(ctx, "auth-config")
+}
+
+func (a *ExistingInfraMachineReconciler) getAssetConfigMap(ctx context.Context, eic *existinginfrav1.ExistingInfraCluster) (*corev1.ConfigMap, error) {
+	return a.getConfigMap(ctx, eic.Name+"-assets")
+}
+
+func (a *ExistingInfraMachineReconciler) getConfigMap(ctx context.Context, mapName string) (*corev1.ConfigMap, error) {
 	var maps corev1.ConfigMapList
 	err := a.Client.List(ctx, &maps, &client.ListOptions{Namespace: a.controllerNamespace})
 	if err != nil {
 		return nil, err
 	}
 	for _, cmap := range maps.Items {
-		if cmap.Name == "auth-config" {
+		if cmap.Name == mapName {
 			return &cmap, nil
 		}
 	}
@@ -1173,7 +1196,7 @@ func (a *ExistingInfraMachineReconciler) getControllerNode(ctx context.Context) 
 			return node, nil
 		}
 	}
-	return nil, errors.New("Could not find controller node")
+	return nil, errors.New("could not find controller node")
 }
 
 func (a *ExistingInfraMachineReconciler) isControllerNode(ctx context.Context, node *corev1.Node) (bool, error) {
@@ -1275,33 +1298,50 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	eic := &existinginfrav1.ExistingInfraCluster{}
 	err := m.reconciler.Client.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, eic)
 	if err != nil {
+		log.Errorf("Failed to retrieve cluster")
 		return nil
 	}
 	cmap, err := m.reconciler.getClusterConfigMap(ctx, eic)
 	if err != nil {
-		return nil
-	}
-
-	// Check if the cluster spec has changed; if it's the first time, the spec will be empty but
-	// the machines get one free reconcile each so we won't pass them along in this case.
-
-	if cmap.Data["spec"] == "" && !eic.Spec.WorkloadCluster { // first time
+		log.Errorf("Failed to retrieve cluster config map")
 		return nil
 	}
 
 	specBytes, err := json.Marshal(eic.Spec)
 	if err != nil {
+		log.Errorf("Failed to marshal cluster spec")
 		return nil
 	}
 	hash := sha256.Sum256(specBytes)
 	specByteHash := base64.StdEncoding.EncodeToString(hash[:])
 
+	// Check if the cluster spec has changed; if it's the first time, the spec will be empty but
+	// the machines get one free reconcile each so we won't pass them along in this case.
+
+	if cmap.Data["spec"] == "" && !eic.Spec.WorkloadCluster { // first time
+		// Update the config map with the new spec
+		if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
+			configMap.Data["spec"] = specByteHash
+			configMap.Data["bigspec"] = string(specBytes)
+			return nil
+		}); err != nil {
+			log.Errorf("Failed to update cluster config map: %v", err)
+			return nil
+		}
+
+		log.Info("Initial cluster update -- no need to reconcile machines")
+		return nil
+	}
+
 	existingSpecHash := cmap.Data["spec"]
 	if specByteHash == existingSpecHash {
+		log.Errorf("Cluster is unchanged -- no need to reconcile machines")
 		return nil
 	}
 
 	log.Info("Cluster configuration changed; marking machines as needing repaving")
+	log.Infof("Original: %s", cmap.Data["bigspec"])
+	log.Infof("New: %s", specBytes)
 
 	if err := m.reconciler.updateAPIServerArgs(ctx, &eic.Spec.APIServer.ExtraArguments); err != nil {
 		log.Errorf("failed to update API server args: %v", err)
@@ -1350,6 +1390,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	// Update the config map with the new spec
 	if err := m.reconciler.updateConfigMap(ctx, m.reconciler.controllerNamespace, eic.Name, func(configMap *v1.ConfigMap) error {
 		configMap.Data["spec"] = specByteHash
+		configMap.Data["bigspec"] = string(specBytes)
 		return nil
 	}); err != nil {
 		log.Errorf("Failed to update cluster config map: %v", err)
