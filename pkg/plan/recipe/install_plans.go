@@ -196,7 +196,6 @@ func BinInstaller(pkgType resource.PkgType, f *eksd.EKSD) (func(string, string) 
 				log.Fatalf("%v", err)
 				return nil
 			}
-			// TODO Use the sha256 value to verify the downlaod
 			binPath := "/usr/bin/" + binName
 			return &resource.Run{
 				Script:     object.String(fmt.Sprintf("curl -o %s %s && openssl dgst -sha256 %s | grep \"%s\" > /dev/null && chmod 755 %s", binPath, binURL, binPath, sha256, binPath)),
