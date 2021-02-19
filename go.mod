@@ -8,6 +8,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/cavaliercoder/go-rpm v0.0.0-20200122174316-8cb9fd9c31a8
 	github.com/chanwit/plandiff v1.0.0
+	github.com/drone/envsubst v1.0.2
 	github.com/fatih/structs v1.1.0
 	github.com/go-logr/logr v0.3.0
 	github.com/go-logr/zapr v0.2.0 // indirect
@@ -15,6 +16,8 @@ require (
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.9.1
+	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
+	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
