@@ -409,7 +409,7 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 	}
 	if err := drain.Drain(node, a.clientSet, drain.Params{
 		Force:               true,
-		DeleteLocalData:     true,
+		DeleteEmptyDirData:  true,
 		IgnoreAllDaemonSets: true,
 	}); err != nil {
 		return err
@@ -548,7 +548,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 				// If there is no error, this will end the run of this reconciliation since the controller will be migrated
 				if err := drain.Drain(node, a.clientSet, drain.Params{
 					Force:               true,
-					DeleteLocalData:     true,
+					DeleteEmptyDirData:  true,
 					IgnoreAllDaemonSets: true,
 				}); err != nil {
 					return false, err
@@ -707,7 +707,7 @@ func (a *ExistingInfraMachineReconciler) performActualUpdate(
 	cluster *existinginfrav1.ExistingInfraCluster) error {
 	if err := drain.Drain(node, a.clientSet, drain.Params{
 		Force:               true,
-		DeleteLocalData:     true,
+		DeleteEmptyDirData:  true,
 		IgnoreAllDaemonSets: true,
 	}); err != nil {
 		return err
