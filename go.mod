@@ -16,8 +16,6 @@ require (
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.9.1
-	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
-	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546 // indirect
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
@@ -32,7 +30,7 @@ require (
 	k8s.io/cluster-bootstrap v0.20.2
 	k8s.io/kube-proxy v0.0.0
 	k8s.io/kubectl v0.20.2
-	k8s.io/kubernetes v1.20.2
+	k8s.io/kubernetes v1.20.3
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 	sigs.k8s.io/cluster-api v0.3.6
 	sigs.k8s.io/controller-runtime v0.6.0
