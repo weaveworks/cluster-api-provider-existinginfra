@@ -248,6 +248,7 @@ func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount in
 		}
 		log.Infof("Call '%s' failed: %s, %s, %v", cmd, out, eout, err)
 	}
+	require.FailNow(c.t, fmt.Sprintf("SSH call failed all retries"))
 }
 
 // Check that a specified number of a resource type is running
