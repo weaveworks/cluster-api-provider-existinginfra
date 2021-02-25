@@ -347,7 +347,7 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 				kubeletSysconfig,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/sysconfig/kubelet"},
+					Destination: "/etc/default/kubelet"},
 				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 			kubeletDeps = append(kubeletDeps, kubeletSysconfig)
 		} else {
@@ -357,7 +357,7 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 				kubeletSysconfig,
 				&resource.File{
 					Content:     processAdditionalArgs(fmt.Sprintf("KUBELET_EXTRA_ARGS=--fail-swap-on=false --node-ip=%s", kubeletNodeIP)),
-					Destination: "/etc/sysconfig/kubelet"},
+					Destination: "/etc/default/kubelet"},
 				plan.DependOn("create-dir:kubelet.service.d", "install:kubelet"))
 		}
 	case resource.PkgTypeDeb:
