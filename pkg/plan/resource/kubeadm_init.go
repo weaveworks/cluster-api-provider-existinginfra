@@ -237,6 +237,10 @@ func (ki *KubeadmInit) Apply(ctx context.Context, runner plan.Runner, diff plan.
 		return false, err
 	}
 
+	if _, err = runner.RunCommand(ctx, "(mkdir -p $HOME/.kube && cp -i /etc/kubernetes/admin.conf $HOME/.kube/config && chown $(id -u):$(id -g) $HOME/.kube/config)", nil); err != nil {
+		return false, err
+	}
+
 	if err := ki.kubectlApply(ctx, "01_namespace.yaml", namespace, runner); err != nil {
 		return false, err
 	}
