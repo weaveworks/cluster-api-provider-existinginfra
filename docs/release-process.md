@@ -1,11 +1,14 @@
-## CAPEI release process
+# Releasing
 
-* In order to create a release we need to create a tag and a Github Action will take care of the release where it will use PR's titles as release notes.
+We use [GoReleaser](https://goreleaser.com/) to generate release artifacts, which is initiated when a tag pushed to the repository.
 
-```
-git checkout master
+## Tagging
+The tag we use in the repository follows [semver](https://github.com/semver/semver/blob/master/semver.md) with the leading **v**
+
+``` shell
+git checkout <branch>
 git fetch
-git reset --hard origin/master
-git tag -a vX.Y.Z -m vX.Y.Z
-git push --tags
+git reset --hard origin/<branch>
+git tag -s -a vMajor.Minor.patch[-(alpha,beta,rc).#]
+git push origin <tag>
 ```
