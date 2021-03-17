@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "v0.2.4"
+const ImageTag = "master-c9fa0f4f-WIP"

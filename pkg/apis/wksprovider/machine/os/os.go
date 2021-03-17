@@ -883,7 +883,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	}
 	log.Info("Got env config")
 
-	configFileResources, err := CreateConfigFileResourcesFromConfigMaps(params.ConfigFileSpecs, params.ProviderConfigMaps)
+	configFileResources, err := CreateConfigFileResourcesFromFileSpecs(params.ConfigFileSpecs)
 	if err != nil {
 		return nil, err
 	}

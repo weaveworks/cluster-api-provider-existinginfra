@@ -233,6 +233,13 @@ func (c *testContext) sshCall(ip, port, cmd string) ([]byte, []byte, error) {
 		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
 }
 
+// Make an ssh call disregarding output
+func (c *testContext) sshAction(ip, port, cmd string) {
+	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ(), CheckError: false},
+		"ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
+		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
+}
+
 // Make an ssh call and fail if it errors
 func (c *testContext) makeSSHCallAndCheckError(ip, port, cmd string) {
 	c.runAndCheckError("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
@@ -249,6 +256,20 @@ func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount in
 		log.Infof("Call '%s' failed: %s, %s, %v", cmd, out, eout, err)
 		time.Sleep(30 * time.Second)
 	}
+	require.FailNow(c.t, fmt.Sprintf("SSH call failed all retries"))
+}
+
+// Make an ssh call and fail if it errors after "n" retries; run "failfunc" on failure
+func (c *testContext) makeSSHCallWithFailureHandler(ip, port, cmd string, failfunc func(), retryCount int) {
+	for ; retryCount > 0; retryCount-- {
+		out, eout, err := c.sshCall(ip, port, cmd)
+		if err == nil {
+			return
+		}
+		log.Infof("Call '%s' failed: %s, %s, %v", cmd, out, eout, err)
+		time.Sleep(30 * time.Second)
+	}
+	failfunc()
 	require.FailNow(c.t, fmt.Sprintf("SSH call failed all retries"))
 }
 

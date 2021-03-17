@@ -570,7 +570,7 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	log.Info("Is original control plane node: ", isOriginal)
 	log.Info("ControlPlaneEndpoint: ", c.Spec.ControlPlaneEndpoint)
 	if isOriginal && c.Spec.ControlPlaneEndpoint == "" {
-		return false, errors.New("cannot perform update of original control plane node without a control plane load balacer")
+		return false, errors.New("cannot perform update of original control plane node without a control plane load balancer")
 	}
 
 	if err = a.performActualUpdate(ctx, installer, machine, node, nodePlan, c); err != nil {

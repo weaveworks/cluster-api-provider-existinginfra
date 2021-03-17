@@ -134,7 +134,7 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	ensureAllWorkloadNodesAreRunning(c, workloadKubeConfig)
 
 	// Change some apiserver and kubelet arguments
-	applyNewAPIServerAndKubeletArguments(c, workloadKubeConfig)
+	applyNewDockerConfigPlusAPIServerAndKubeletArguments(c, workloadKubeConfig)
 
 	// Wait for the cluster to start repaving
 	ensureAllWorkloadNodesStoppedRunning(c, workloadKubeConfig)
@@ -214,13 +214,29 @@ func installMachinePool(c *testContext, info []capeios.MachineInfo) {
 }
 
 // Update kubelet and apiserver arguments in running cluster
-func applyNewAPIServerAndKubeletArguments(c *testContext, kubeconfig string) {
+func applyNewDockerConfigPlusAPIServerAndKubeletArguments(c *testContext, kubeconfig string) {
 	eic := getExistingInfraCluster(c)
 	cleanJson := eic.Annotations["kubectl.kubernetes.io/last-applied-configuration"]
 	var cleanEic v1alpha3.ExistingInfraCluster
 	err := json.Unmarshal([]byte(cleanJson), &cleanEic)
 	require.NoError(c.t, err)
 	eic = &cleanEic
+	files := eic.Spec.OS.Files
+	var contentMap map[string]interface{}
+	for fidx := range files {
+		file := &files[fidx]
+		if file.Destination == "/etc/docker/daemon.json" {
+			err := json.Unmarshal([]byte(file.Source.Contents), &contentMap)
+			require.NoError(c.t, err)
+			logopts, ok := contentMap["log-opts"]
+			require.True(c.t, ok)
+			logopts.(map[string]interface{})["labels"] = "io.kubernetes.pod.namespace,io.kubernetes.pod.name,io.kubernetes.container.name"
+			bytes, err := json.Marshal(logopts)
+			require.NoError(c.t, err)
+			file.Source.Contents = string(bytes)
+			break
+		}
+	}
 	aargs := []v1alpha3.ServerArgument{}
 	for name, value := range apiServerArgs {
 		aargs = append(aargs, v1alpha3.ServerArgument{Name: name, Value: value})
@@ -268,6 +284,17 @@ func ensureNewArgumentsWereProcessed(c *testContext) {
 			argString := fmt.Sprintf("%s=%s", name, val)
 			c.makeSSHCallWithRetries(conn.ip, conn.port, fmt.Sprintf("ps -ef | grep -v 'ps -ef' | grep kube-apiserver | grep %s", argString), 5)
 		}
+	}
+
+	for _, conn := range conns {
+		c.makeSSHCallWithFailureHandler(
+			conn.ip,
+			conn.port,
+			"grep 'io.kubernetes.pod.name' /etc/docker/daemon.json",
+			func() {
+				c.sshAction(conn.ip, conn.port, "cat /etc/docker/daemon.json")
+			},
+			5)
 	}
 }
 
