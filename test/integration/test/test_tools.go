@@ -252,6 +252,20 @@ func (c *testContext) makeSSHCallWithRetries(ip, port, cmd string, retryCount in
 	require.FailNow(c.t, fmt.Sprintf("SSH call failed all retries"))
 }
 
+// Make an ssh call and fail if it errors after "n" retries; run "failfunc" on failure
+func (c *testContext) makeSSHCallWithFailureHandler(ip, port, cmd string, failfunc func(), retryCount int) {
+	for ; retryCount > 0; retryCount-- {
+		out, eout, err := c.sshCall(ip, port, cmd)
+		if err == nil {
+			return
+		}
+		log.Infof("Call '%s' failed: %s, %s, %v", cmd, out, eout, err)
+		time.Sleep(30 * time.Second)
+	}
+	failfunc()
+	require.FailNow(c.t, fmt.Sprintf("SSH call failed all retries"))
+}
+
 // Check that a specified number of a resource type is running
 func (c *testContext) ensureCount(itemType string, count int, kubeconfigPath string) {
 	for retryCount := 1; retryCount <= 30; retryCount++ {

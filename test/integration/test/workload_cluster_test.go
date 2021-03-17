@@ -287,9 +287,15 @@ func ensureNewArgumentsWereProcessed(c *testContext) {
 	}
 
 	for _, conn := range conns {
-		c.makeSSHCallWithRetries(conn.ip, conn.port, "grep 'io.kubernetes.pod.name' /etc/docker/daemon.json", 5)
+		c.makeSSHCallWithFailureHandler(
+			conn.ip,
+			conn.port,
+			"grep 'io.kubernetes.pod.name' /etc/docker/daemon.json",
+			func() {
+				c.run("cat /etc/docker/daemon.json")
+			},
+			5)
 	}
-	time.Sleep(10 * time.Minute)
 }
 
 func seedNodeCall(c *testContext, cmd string) ([]byte, []byte, error) {
