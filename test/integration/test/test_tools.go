@@ -233,6 +233,13 @@ func (c *testContext) sshCall(ip, port, cmd string) ([]byte, []byte, error) {
 		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
 }
 
+// Make an ssh call disregarding output
+func (c *testContext) sshAction(ip, port, cmd string) {
+	c.runWithConfig(commandConfig{Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ(), CheckError: false},
+		"ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",
+		"-o", "UserKnownHostsFile /dev/null", "-o", "StrictHostKeyChecking=no", "-p", port, ip, cmd)
+}
+
 // Make an ssh call and fail if it errors
 func (c *testContext) makeSSHCallAndCheckError(ip, port, cmd string) {
 	c.runAndCheckError("ssh", "-i", filepath.Join(c.tmpDir, "cluster-key"), "-l", "root",

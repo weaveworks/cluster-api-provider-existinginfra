@@ -292,7 +292,7 @@ func ensureNewArgumentsWereProcessed(c *testContext) {
 			conn.port,
 			"grep 'io.kubernetes.pod.name' /etc/docker/daemon.json",
 			func() {
-				c.run("cat /etc/docker/daemon.json")
+				c.sshAction(conn.ip, conn.port, "cat /etc/docker/daemon.json")
 			},
 			5)
 	}
