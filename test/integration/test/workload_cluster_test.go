@@ -222,19 +222,16 @@ func applyNewDockerConfigPlusAPIServerAndKubeletArguments(c *testContext, kubeco
 	require.NoError(c.t, err)
 	eic = &cleanEic
 	files := eic.Spec.OS.Files
-	log.Infof("FILES: %#v", files)
 	var contentMap map[string]interface{}
 	for fidx := range files {
 		file := &files[fidx]
 		if file.Destination == "/etc/docker/daemon.json" {
 			err := json.Unmarshal([]byte(file.Source.Contents), &contentMap)
 			require.NoError(c.t, err)
-			log.Infof("CM: %#v", contentMap)
 			logopts, ok := contentMap["log-opts"]
 			require.True(c.t, ok)
 			logopts.(map[string]interface{})["labels"] = "io.kubernetes.pod.namespace,io.kubernetes.pod.name,io.kubernetes.container.name"
 			bytes, err := json.Marshal(logopts)
-			fmt.Printf("BYTES: %s\n", bytes)
 			require.NoError(c.t, err)
 			file.Source.Contents = string(bytes)
 			break
