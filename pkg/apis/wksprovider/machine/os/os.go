@@ -887,6 +887,7 @@ func (o OS) CreateNodeSetupPlan(ctx context.Context, params NodeParams) (*plan.P
 	if err != nil {
 		return nil, err
 	}
+	log.Infof("CFRs: %#v", configFileResources)
 	log.Info("Created config file resources")
 
 	b := plan.NewBuilder()
