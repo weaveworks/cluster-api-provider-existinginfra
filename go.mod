@@ -22,6 +22,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
 	github.com/tj/assert v0.0.3
+	github.com/weaveworks/footloose v0.0.0-20210208164054-2862489574a3 // indirect
 	github.com/weaveworks/libgitops v0.0.2
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	gopkg.in/oleiade/reflections.v1 v1.0.0
@@ -36,6 +37,7 @@ require (
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 	sigs.k8s.io/cluster-api v0.3.6
 	sigs.k8s.io/controller-runtime v0.6.0
+	sigs.k8s.io/kind v0.9.0 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.4.2
 	sigs.k8s.io/yaml v1.2.0
 )

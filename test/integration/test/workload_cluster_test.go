@@ -231,6 +231,7 @@ func applyNewDockerConfigPlusAPIServerAndKubeletArguments(c *testContext, kubeco
 			require.True(c.t, ok)
 			logopts.(map[string]interface{})["labels"] = "io.kubernetes.pod.namespace,io.kubernetes.pod.name,io.kubernetes.container.name"
 			bytes, err := json.Marshal(logopts)
+			fmt.Printf("BYTES: %s\n", bytes)
 			require.NoError(c.t, err)
 			file.Source.Contents = string(bytes)
 			break
@@ -286,8 +287,9 @@ func ensureNewArgumentsWereProcessed(c *testContext) {
 	}
 
 	for _, conn := range conns {
-		c.makeSSHCallWithRetries(conn.ip, conn.port, "cat /etc/docker/daemon.json | grep 'io.kubernetes.pod.name'", 5)
+		c.makeSSHCallWithRetries(conn.ip, conn.port, "grep 'io.kubernetes.pod.name' /etc/docker/daemon.json", 5)
 	}
+	time.Sleep(10 * time.Minute)
 }
 
 func seedNodeCall(c *testContext, cmd string) ([]byte, []byte, error) {
