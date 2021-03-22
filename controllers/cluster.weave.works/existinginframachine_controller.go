@@ -417,6 +417,24 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 	if err := a.Client.Delete(ctx, node); err != nil {
 		return err
 	}
+
+	//After deleting the k8s resource we need to reset the node so it can be readded later with a clean state.
+	installer, closer, err := a.connectTo(ctx, c, eim)
+	if err != nil {
+		return gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name)
+	}
+	defer closer.Close()
+
+	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
+	if err != nil {
+		return err
+	}
+	contextLog.Info("resetting deleted machine ...")
+	if err := nodePlan.Undo(ctx, installer.Runner, plan.EmptyState); err != nil {
+		// best effort attempt given that not all resources have undo implement.
+		contextLog.Error("failed to completely reset machine: %v", err)
+	}
+
 	a.recordEvent(machine, corev1.EventTypeNormal, "Delete", "deleted machine %s", machine.Name)
 	return nil
 }
