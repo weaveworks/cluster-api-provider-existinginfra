@@ -421,25 +421,6 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 	//best effort attempt to clean up the machine after deleting it.
 	a.resetMachine(ctx, c, machine, eim)
 
-	// installer, closer, err := a.connectTo(ctx, c, eim)
-	// if err != nil {
-	// 	return gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name)
-	// }
-	// defer closer.Close()
-	// b := plan.NewBuilder()
-	// b.AddResource(
-	// 	"kubeadm:reset",
-	// 	&resource.Run{Script: object.String("kubeadm reset --force")},
-	// )
-	// p, err := b.Plan()
-	// if err != nil {
-	// 	log.Fatalf("%v", err)
-	// }
-	// if _, err := p.Apply(ctx, installer.Runner, plan.EmptyDiff()); err != nil {
-	// 	// best effort attempt to clean up the machine after deleting it.
-	// 	contextLog.Errorf("failed to completely reset machine: %v", err)
-	// }
-
 	if err := a.Client.Delete(ctx, node); err != nil {
 		return err
 	}
