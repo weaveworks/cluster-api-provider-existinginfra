@@ -434,17 +434,18 @@ func (a *ExistingInfraMachineReconciler) resetMachine(ctx context.Context, c *ex
 		log.Error(gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name))
 	}
 	defer closer.Close()
+
 	b := plan.NewBuilder()
 	b.AddResource(
 		"kubeadm:reset",
 		&resource.Run{Script: object.String("kubeadm reset --force")},
 	)
+
 	p, err := b.Plan()
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 	if _, err := p.Apply(ctx, installer.Runner, plan.EmptyDiff()); err != nil {
-
 		log.Errorf("failed to completely reset machine: %v", err)
 	}
 }
