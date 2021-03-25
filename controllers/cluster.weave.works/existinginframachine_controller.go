@@ -42,6 +42,7 @@ import (
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/specs"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/encoding"
 	bootstraputils "github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/kubeadm"
+	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/object"
 	"github.com/weaveworks/cluster-api-provider-existinginfra/pkg/utilities/version"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -162,11 +163,12 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 
 	// Object still there but with deletion timestamp => run our finalizer
 	if !eim.ObjectMeta.DeletionTimestamp.IsZero() {
-		controllerutil.RemoveFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
 		err := a.delete(ctx, eic, machine, eim)
 		if err != nil {
 			contextLog.Errorf("failed to delete machine: %v", err)
 		}
+
+		controllerutil.RemoveFinalizer(eim, existinginfrav1.ExistingInfraMachineFinalizer)
 		return ctrl.Result{}, err
 	}
 
@@ -392,7 +394,7 @@ func (a *ExistingInfraMachineReconciler) installNewBootstrapToken(ctx context.Co
 // Delete the machine. If no error is returned, it is assumed that all dependent resources have been cleaned up.
 func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) error {
 	contextLog := log.WithFields(log.Fields{"machine": machine.Name, "cluster": c.Name})
-	contextLog.Info("deleting machine ...")
+	contextLog.Info("deleting machine...")
 	addr := a.getMachineAddress(eim)
 	node, err := a.findNodeByPrivateAddress(ctx, addr)
 	if err != nil {
@@ -414,11 +416,38 @@ func (a *ExistingInfraMachineReconciler) delete(ctx context.Context, c *existing
 	}); err != nil {
 		return err
 	}
+
+	//After deleting the k8s resource we need to reset the node so it can be readded later with a clean state.
+	//best effort attempt to clean up the machine after deleting it.
+	a.resetMachine(ctx, c, machine, eim)
+
 	if err := a.Client.Delete(ctx, node); err != nil {
 		return err
 	}
 	a.recordEvent(machine, corev1.EventTypeNormal, "Delete", "deleted machine %s", machine.Name)
 	return nil
+}
+
+func (a *ExistingInfraMachineReconciler) resetMachine(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) {
+	installer, closer, err := a.connectTo(ctx, c, eim)
+	if err != nil {
+		log.Error(gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name))
+	}
+	defer closer.Close()
+
+	b := plan.NewBuilder()
+	b.AddResource(
+		"kubeadm:reset",
+		&resource.Run{Script: object.String("kubeadm reset --force")},
+	)
+
+	p, err := b.Plan()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	if _, err := p.Apply(ctx, installer.Runner, plan.EmptyDiff()); err != nil {
+		log.Errorf("failed to completely reset machine: %v", err)
+	}
 }
 
 // Update the machine to the provided definition.
