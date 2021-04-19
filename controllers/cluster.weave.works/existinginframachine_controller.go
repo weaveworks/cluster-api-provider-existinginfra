@@ -1388,7 +1388,14 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	cps := []reconcile.Request{}
 	workers := []reconcile.Request{}
 
+
+	bts, _ := json.Marshal(machines.Items)
+
+	log.Infof("DEBUG-Machines.Items(%s)\n",string(bts))
 	for _, machine := range machines.Items {
+
+		log.Infof("DEBUG-Machines.Items[%s](%s)\n",machine.Name,string(bts))
+
 		privateAddress := machine.Spec.Private.Address
 		log.Infof("Marking: %s for repaving", privateAddress)
 		node, err := m.reconciler.findNodeByPrivateAddress(ctx, privateAddress)
@@ -1425,6 +1432,10 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		log.Errorf("Failed to update cluster config map: %v", err)
 		return nil
 	}
+
+	bts, _ = json.Marshal(orderedRequests)
+
+	log.Infof("DEBUG-orderedRequests(%s)\n",string(bts))
 
 	return orderedRequests
 }
