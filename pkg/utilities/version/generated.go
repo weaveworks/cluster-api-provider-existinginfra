@@ -1,3 +1,3 @@
 package version
 
-const ImageTag = "0.0.1"
+const ImageTag = "fix-upgrade-centos-circleci-702d1dc3"
