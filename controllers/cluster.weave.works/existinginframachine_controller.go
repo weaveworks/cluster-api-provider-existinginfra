@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/thanhpk/randstr"
 	"io"
 	"strings"
 	"time"
@@ -107,6 +108,8 @@ func (a *ExistingInfraMachineReconciler) Reconcile(req ctrl.Request) (_ ctrl.Res
 		}
 		return ctrl.Result{}, err
 	}
+
+	log.Infof("Reconciling Machine %s \n", eim.Name)
 
 	// Get Machine via OwnerReferences
 	machine, err := util.GetOwnerMachine(ctx, a.Client, eim.ObjectMeta)
@@ -454,11 +457,15 @@ func (a *ExistingInfraMachineReconciler) resetMachine(ctx context.Context, c *ex
 func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existinginfrav1.ExistingInfraCluster, machine *clusterv1.Machine, eim *existinginfrav1.ExistingInfraMachine) (bool, error) {
 	contextLog := log.WithFields(log.Fields{"machine": machine.Name, "cluster": c.Name})
 	contextLog.Info("updating machine...")
+	contextLog.Info("DEBUG-check-a")
 	installer, closer, err := a.connectTo(ctx, c, eim)
+	contextLog.Info("DEBUG-check-b")
 	if err != nil {
 		return false, gerrors.Wrapf(err, "failed to establish connection to machine %s", machine.Name)
 	}
 	defer closer.Close()
+
+	contextLog.Info("DEBUG-check-c")
 
 	addr := a.getMachineAddress(eim)
 	node, err := a.findNodeByPrivateAddress(ctx, addr)
@@ -483,11 +490,13 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	log.Infof("found existing node for %s...", addr)
 	contextLog = contextLog.WithFields(log.Fields{"node": node.Name})
 
+	contextLog.Info("DEBUG-check0")
 	if err = a.setNodeProviderIDIfNecessary(ctx, node); err != nil {
 		return false, err
 	}
 	isMaster := isMaster(node)
 	if isMaster {
+		contextLog.Info("DEBUG-check0.1")
 		// Check if the kubeadm-certs secret exists.
 		// If not, run the renewal plan to upload new certs:
 		// kubeadm init phase upload-certs --upload-certs
@@ -503,21 +512,26 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 			}
 		}
 
+		contextLog.Info("DEBUG-check0.2")
+
 		if err := a.prepareForMasterUpdate(ctx, node); err != nil {
 			contextLog.Infof("skipping update for %s...", addr)
 			return false, err
 		}
 	}
+	contextLog.Info("DEBUG-check1")
 	nodePlan, err := a.getNodePlan(ctx, c, machine, a.getMachineAddress(eim), installer)
 	if err != nil {
 		return false, gerrors.Wrapf(err, "Failed to get node plan for machine %s", machine.Name)
 	}
 	planState := nodePlan.ToState()
+	contextLog.Info("DEBUG-check2")
 	currentPlan, found := node.Annotations[recipe.PlanKey]
 	if !found {
 		contextLog.Info("No plan annotation on Node; unable to update")
 		return false, nil
 	}
+	contextLog.Info("DEBUG-check3")
 	currentState, err := plan.NewStateFromJSON(strings.NewReader(currentPlan))
 	if err != nil {
 		return false, gerrors.Wrapf(err, "Failed to parse node plan for machine %s", machine.Name)
@@ -525,11 +539,13 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	// check equality by re-serialising to JSON; this avoids any formatting differences, also
 	// type differences between deserialised State and State created from Plan.
 	planJSON := planState.ToJSON()
+	contextLog.Info("DEBUG-check4")
 	if currentState.ToJSON() == planJSON {
 		contextLog.Info("Machine and node have matching plans; nothing to do")
 		return false, nil
 	}
 
+	contextLog.Info("DEBUG-check5")
 	if diffedPlan, err := currentState.Diff(planState); err == nil {
 		contextLog.Info("........................ DIFF PLAN ........................")
 		fmt.Print(diffedPlan)
@@ -551,7 +567,8 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 		if err != nil {
 			return false, err
 		}
-		contextLog.Infof("Original needs update: %t", originalNeedsUpdate)
+		unique := randstr.Hex(3)
+		contextLog.Infof("Original needs update: %t %s", originalNeedsUpdate, unique)
 		masterNeedsUpdate, err := a.checkIfMasterNotAtVersion(ctx, nodeStyleVersion)
 		if err != nil {
 			return false, err
@@ -615,6 +632,9 @@ func (a *ExistingInfraMachineReconciler) update(ctx context.Context, c *existing
 	eim.Status.Ready = true
 
 	a.recordEvent(machine, corev1.EventTypeNormal, "Update", "updated machine %s", machine.Name)
+
+	contextLog.Info("End")
+
 	return false, nil
 }
 
@@ -959,6 +979,7 @@ func (a *ExistingInfraMachineReconciler) getOriginalMasterNode(ctx context.Conte
 		if err := a.setNodeLabel(ctx, originalMasterNode.Name, originalMasterLabel, ""); err != nil {
 			return nil, err
 		}
+		log.Infoln("New Node with Original Label", originalMasterNode.Name)
 	}
 
 	return originalMasterNode, nil
@@ -1388,13 +1409,15 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	cps := []reconcile.Request{}
 	workers := []reconcile.Request{}
 
+	bts, err := json.Marshal(machines.Items)
+	log.Infof("ERROR-marshall-machines.Items %s", err.Error())
+	log.Infof("DEBUG-Machines.Items(%s)\n", string(bts))
 
-	bts, _ := json.Marshal(machines.Items)
-
-	log.Infof("DEBUG-Machines.Items(%s)\n",string(bts))
 	for _, machine := range machines.Items {
 
-		log.Infof("DEBUG-Machines.Items[%s](%s)\n",machine.Name,string(bts))
+		//bts, err := json.Marshal(machine)
+		//log.Infof("ERROR-marshall-machine %s", err.Error())
+		log.Infof("DEBUG-Machine(%s)\n", machine.Name)
 
 		privateAddress := machine.Spec.Private.Address
 		log.Infof("Marking: %s for repaving", privateAddress)
@@ -1433,9 +1456,9 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 		return nil
 	}
 
-	bts, _ = json.Marshal(orderedRequests)
-
-	log.Infof("DEBUG-orderedRequests(%s)\n",string(bts))
+	bts, err = json.Marshal(orderedRequests)
+	log.Infof("ERROR-orderedRequests %s", err.Error())
+	log.Infof("DEBUG-orderedRequests(%s)\n", string(bts))
 
 	return orderedRequests
 }

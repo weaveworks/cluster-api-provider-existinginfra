@@ -21,6 +21,7 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
+	github.com/thanhpk/randstr v1.0.4
 	github.com/tj/assert v0.0.3
 	github.com/weaveworks/footloose v0.0.0-20210208164054-2862489574a3 // indirect
 	github.com/weaveworks/libgitops v0.0.2

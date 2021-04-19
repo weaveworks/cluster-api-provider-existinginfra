@@ -1,5 +1,5 @@
 VERSION=$(shell git describe --always --match "v*")
-IMAGE_TAG := $(shell tools/image-tag)
+IMAGE_TAG := 0.0.1
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd"
 
@@ -83,11 +83,11 @@ generate: controller-gen conversion-gen image-tag-gen
 
 # Build the docker image
 docker-build: unit-tests
-	docker build . -t weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+	docker build . -t josecorda/cluster-api-existinginfra-controller:${IMAGE_TAG}
 
 # Push the docker image
 push: docker-build
-	docker push weaveworks/cluster-api-existinginfra-controller:${IMAGE_TAG}
+	docker push josecordaz/cluster-api-existinginfra-controller:${IMAGE_TAG}
 
 # Generate code containing an image manifest that tracks the current IMAGE_TAG so
 # this code can be used upstream by builds that don't have access to the IMAGE_TAG
