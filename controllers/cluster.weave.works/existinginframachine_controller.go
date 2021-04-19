@@ -1410,7 +1410,7 @@ func (m MachineMapper) Map(mo handler.MapObject) []reconcile.Request {
 	workers := []reconcile.Request{}
 
 	bts, err := json.Marshal(machines.Items)
-	log.Infof("ERROR-marshall-machines.Items %s", err.Error())
+	log.Infof("ERROR-marshall-machines.Items %s", err)
 	log.Infof("DEBUG-Machines.Items(%s)\n", string(bts))
 
 	for _, machine := range machines.Items {
