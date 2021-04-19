@@ -1,5 +1,5 @@
 VERSION=$(shell git describe --always --match "v*")
-IMAGE_TAG := 0.0.1
+IMAGE_TAG := $(shell tools/image-tag)
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd"
 
