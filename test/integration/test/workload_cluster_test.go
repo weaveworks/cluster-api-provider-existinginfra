@@ -125,7 +125,6 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	// Store swap settings in /etc/fstab so we can demonstrate they are removed
 	ensureSwapSettingsArePersisted(c)
 
-	time.Sleep(200 * time.Minute)
 	// Create a workload cluster
 	createWorkloadCluster(c, version)
 
