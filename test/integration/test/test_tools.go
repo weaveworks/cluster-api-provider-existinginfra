@@ -402,7 +402,7 @@ func (c *testContext) ConfigureHAProxy(loadBalancerAddress string, loadBalancerS
 		Destination: "/tmp/haproxy.cfg",
 	}
 	haproxyResource := &resource.Run{
-		Script:     object.String("mkdir /tmp/haproxy && docker run --detach --name haproxy -v /tmp/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg -v /tmp/haproxy:/var/lib/haproxy -p 6443:6443 haproxy"),
+		Script:     object.String("mkdir /tmp/haproxy && docker run --detach --name haproxy -v /tmp/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg -v /tmp/haproxy:/var/lib/haproxy -p 6443:6443 haproxy:2.3"),
 		UndoScript: object.String("docker rm haproxy || true"),
 	}
 	lbPlanBuilder := plan.NewBuilder()
