@@ -133,7 +133,7 @@ func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime
 		IsDockerOnCentOS = true
 	case resource.PkgTypeDeb:
 		// TODO(michal): Use the official docker.com repo
-		b.AddResource("install:docker", &resource.Deb{Name: "docker.io"})
+		b.AddResource("install:docker", &resource.Deb{Name: criSpec.Package, Suffix: "=" + criSpec.Version})
 	}
 
 	if cfg.LockYUMPkgs {
