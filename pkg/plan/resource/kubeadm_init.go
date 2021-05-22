@@ -404,7 +404,7 @@ func buildKubeadmInitPlan(path string, ignorePreflightErrors string, useIPTables
 		plan.DependOn("kubeadm:run-init", "kubeadm:config:kubectl-dir"),
 	).AddResource(
 		"kubeadm:config:set-ownership",
-		&Run{Script: plan.ParamString("chown -R $(id -u):$(id -g) %s/.kube", &homedir)},
+		&Run{Script: plan.ParamString("chown -R $(id -u):$(id -g) %s/.kube/config", &homedir)},
 		plan.DependOn("kubeadm:config:copy"),
 	)
 
