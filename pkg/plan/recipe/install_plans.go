@@ -132,8 +132,16 @@ func BuildCRIPlan(ctx context.Context, criSpec *existinginfrav1.ContainerRuntime
 		// SELinux will be here along with docker and containerd-selinux packages
 		IsDockerOnCentOS = true
 	case resource.PkgTypeDeb:
-		// TODO(michal): Use the official docker.com repo
-		b.AddResource("install:docker", &resource.Deb{Name: "docker.io"})
+		b.AddResource("install:lsb-release", &resource.Deb{Name: "lsb-release"})
+		b.AddResource("configure:docker-repo-key", &resource.Run{
+			Script:     object.String("curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o docker.gpg  && gpg --batch --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg docker.gpg"),
+			UndoScript: object.String("rm -f /usr/share/keyrings/docker-archive-keyring.gpg"),
+		})
+		b.AddResource("configure:docker-repo", &resource.Run{
+			Script:     object.String("echo \"deb [signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/nul"),
+			UndoScript: object.String("rm -f /etc/apt/sources.list.d/docker.list"),
+		}, plan.DependOn("configure:docker-repo-key"), plan.DependOn("install:lsb-release"))
+		b.AddResource("install:docker", &resource.Deb{Name: criSpec.Package}, plan.DependOn("configure:docker-repo"))
 	}
 
 	if cfg.LockYUMPkgs {
@@ -221,14 +229,15 @@ func BuildK8SPlan(kubernetesVersion string, kubeletNodeIP string, seLinuxInstall
 	case resource.PkgTypeRPM, resource.PkgTypeRHEL:
 		// do nothing
 	case resource.PkgTypeDeb:
-		// XXX: Workaround for https://github.com/weaveworks/wksctl/issues/654 : *.gpg is a binary format, and currently wks is unable to handle
-		// binary files in the configuration configmap. Therefore, I needed to supply the *.gpg contents base64-encoded.
-		// In a world without that bug, one could just use the "!!binary"" YAML format in the configmap and store the *.gpg there directly.
+		b.AddResource("install:linux-image", &resource.Run{
+			Script: object.String("apt-get install -y linux-image-`uname -r`"),
+		})
 		b.AddResource("configure:kubernetes-repo-key", &resource.Run{
-			Script: object.String("base64 -d /tmp/cloud-google-com.gpg.b64 > /etc/apt/trusted.gpg.d/cloud-google-com.gpg"),
+			Script:     object.String("curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg"),
+			UndoScript: object.String("rm -f /usr/share/keyrings/kubernetes-archive-keyring.gpg"),
 		})
 
-		repoLine := "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+		repoLine := "deb  [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg]  https://apt.kubernetes.io/ kubernetes-xenial main"
 		repoFile := "/etc/apt/sources.list.d/wks-google.list"
 		sedExpr := fmt.Sprintf(`\!%s!d`, repoLine) // same as '/%s/d' but allows '/' in %s
 		b.AddResource("configure:kubernetes-repo", &resource.Run{
