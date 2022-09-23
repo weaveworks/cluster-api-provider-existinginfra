@@ -1,3 +1,11 @@
+# NOTICE OF DEPRECATION
+
+**This project is being sunsetted/deprecated and will no longer be maintained. If you currently use this provider please get in contact with us via the community slack (see below) or by opening an issue.**
+
+**If you require a Cluster API provider for existing infrastructure / hosts then take a look at [Cluster API Provider for BringYourOwnHost](https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/) which the CAPI community is getting behind. The BYOH provider is in the process of being donated to kubernetes-sigs and once that completes this repo will be archived**
+
+[![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
+
 # cluster-api-provider-existinginfra
 
 [![godev](https://img.shields.io/static/v1?label=godev&message=reference&color=00add8)](https://pkg.go.dev/github.com/weaveworks/cluster-api-provider-existinginfra)
