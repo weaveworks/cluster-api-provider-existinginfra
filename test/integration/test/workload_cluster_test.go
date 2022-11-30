@@ -84,6 +84,7 @@ var (
 
 // Deploy our provider and use it to create a workload cluster
 func TestWorkloadClusterCreation(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
 	version := os.Getenv("KUBERNETES_VERSION")
 	if version == "" {
 		version = "1.17.5"
@@ -94,7 +95,7 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	defer c.cleanup()
 
 	// Create two footloose machines to host a workload cluster
-	machineInfo := createFootlooseMachines(c)
+	nodeMachineInfo := createFootlooseMachines(c)
 	defer deleteFootlooseMachines(c)
 
 	// Set up a docker network for communication
@@ -116,7 +117,7 @@ func TestWorkloadClusterCreation(t *testing.T) {
 	installNamespace(c)
 
 	// Create a machine pool with IPs, keys, and users
-	installMachinePool(c, machineInfo)
+	installMachinePool(c, nodeMachineInfo)
 
 	// Wait for the management cluster to be ready
 	ensureAllManagementPodsAreRunning(c)
@@ -440,17 +441,6 @@ func createFootlooseMachines(c *testContext) []capeios.MachineInfo {
 			PublicIP:    "172.17.0.4",
 			PublicPort:  "22",
 			PrivateIP:   "172.17.0.4",
-			PrivatePort: "22",
-		},
-		{
-			// load balancer
-			SSHUser: "root",
-			SSHKey:  base64.StdEncoding.EncodeToString(key),
-			// Use private address for public since we're using footloose machines
-			// from docker
-			PublicIP:    "172.17.0.2",
-			PublicPort:  "22",
-			PrivateIP:   "172.17.0.2",
 			PrivatePort: "22",
 		},
 	}
